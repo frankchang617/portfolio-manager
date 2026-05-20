@@ -232,6 +232,23 @@ function reducer(state, action) {
       })}
     }
 
+    case 'UPDATE_STOCK_TRANSACTION': {
+      const { portfolioId, stockId, transactionId, updates } = action
+      return { ...state, portfolios: state.portfolios.map(p => {
+        if (p.id !== portfolioId) return p
+        const stocks = p.stocks.map(s => {
+          if (s.id !== stockId) return s
+          const transactions = (s.transactions || []).map(t =>
+            t.id !== transactionId ? t : { ...t, ...updates }
+          )
+          const pos = calcPosition(s.initialShares ?? 0, s.initialAvgCost ?? 0, transactions)
+          return { ...s, transactions, shares: pos.shares, avgCost: pos.avgCost, stockRealizedPnL: pos.realizedPnL }
+        })
+        const portfolioRpnl = stocks.reduce((sum, s) => sum + (s.stockRealizedPnL || 0), 0)
+        return { ...p, stocks, realizedPnL: portfolioRpnl }
+      })}
+    }
+
     case 'CLEAR_STOCK_TRANSACTIONS': {
       const { portfolioId, stockId } = action
       return { ...state, portfolios: state.portfolios.map(p => {
