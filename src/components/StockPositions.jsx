@@ -155,8 +155,14 @@ export default function StockPositions() {
       const todayChange = price != null && prevClose != null ? price - prevClose : null
       const todayChangePct = prevClose != null && prevClose !== 0 ? ((price - prevClose) / prevClose) * 100 : null
       const allocation = isCleared ? 0 : (totalStockValue > 0 ? (marketValue / totalStockValue) * 100 : 0)
+      const totalPnL = isCleared
+        ? stockRealizedPnL
+        : (paperPnL != null ? paperPnL + stockRealizedPnL : null)
+      const totalPnLPct = isCleared
+        ? realizedPct
+        : (totalPnL != null && costBasis !== 0 ? (totalPnL / costBasis) * 100 : null)
 
-      return { ...s, price, prevClose, marketValue, costBasis, perSharePnL, paperPnL, pnlPct, todayChange, todayChangePct, allocation, stockRealizedPnL, realizedPct, isCleared }
+      return { ...s, price, prevClose, marketValue, costBasis, perSharePnL, paperPnL, pnlPct, todayChange, todayChangePct, allocation, stockRealizedPnL, realizedPct, isCleared, totalPnL, totalPnLPct }
     })
   }, [sourceStocks, prices])
 
@@ -272,7 +278,9 @@ export default function StockPositions() {
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs text-claude-muted font-medium mr-1">排序方式：</span>
               {[
-                { field: 'pnlPct',           label: '盈亏 %' },
+                { field: 'pnlPct',      label: '账面盈亏%' },
+                { field: 'totalPnL',    label: '总盈亏' },
+                { field: 'totalPnLPct', label: '总盈亏%' },
                 { field: 'paperPnL',         label: '账面盈亏' },
                 { field: 'marketValue',      label: '持仓价值' },
                 { field: 'stockRealizedPnL', label: '已实现盈亏' },
@@ -316,7 +324,7 @@ export default function StockPositions() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-claude-border bg-gray-50/50">
-                  {['代码','价格','今日涨跌','数量','平均成本','持仓价值','每股盈亏','账面盈亏','已实现盈亏','盈亏 %','占比 %', ...(!isAggregate ? ['操作'] : [])].map(h => (
+                  {['代码','价格','今日涨跌','数量','平均成本','持仓价值','每股盈亏','账面盈亏','已实现盈亏','账面盈亏%','总盈亏','总盈亏%','占比 %', ...(!isAggregate ? ['操作'] : [])].map(h => (
                     <th key={h} className={`text-xs font-semibold text-claude-subtle uppercase tracking-wide py-3 px-4 whitespace-nowrap ${h === '代码' ? 'text-left' : 'text-right'}`}>
                       {h}
                     </th>
@@ -393,9 +401,17 @@ export default function StockPositions() {
                         </div>
                       ) : <span className="text-claude-subtle text-sm">—</span>}
                     </td>
-                    {/* 盈亏 % */}
+                    {/* 账面盈亏% */}
                     <td className={`py-3.5 px-4 text-right text-sm font-medium ${getPnLClass(s.pnlPct)}`}>
                       {s.pnlPct != null ? fmt.pctChange(s.pnlPct) : '—'}
+                    </td>
+                    {/* 总盈亏 */}
+                    <td className={`py-3.5 px-4 text-right text-sm font-mono font-semibold ${getPnLClass(s.totalPnL)}`}>
+                      {s.totalPnL != null ? fmt.pnl(s.totalPnL) : '—'}
+                    </td>
+                    {/* 总盈亏% */}
+                    <td className={`py-3.5 px-4 text-right text-sm font-medium ${getPnLClass(s.totalPnLPct)}`}>
+                      {s.totalPnLPct != null ? fmt.pctChange(s.totalPnLPct) : '—'}
                     </td>
                     {/* 占比 % */}
                     <td className="py-3.5 px-4 text-right text-sm text-claude-muted">
@@ -422,7 +438,7 @@ export default function StockPositions() {
                   <td className="py-3.5 px-4 text-right text-sm font-mono font-semibold text-claude-text">
                     {fmt.currency(sourceCash)}
                   </td>
-                  <td colSpan={5} className="py-3.5 px-4 text-right text-claude-subtle text-sm">—</td>
+                  <td colSpan={7} className="py-3.5 px-4 text-right text-claude-subtle text-sm">—</td>
                   {!isAggregate && (
                     <td className="py-3.5 px-4 text-right">
                       <button
