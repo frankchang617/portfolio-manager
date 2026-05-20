@@ -46,6 +46,19 @@ export async function fetchQuotes(symbols) {
 }
 
 /**
+ * Fetch company profile (name, logo) for a single symbol
+ * Returns { name } or null if not found
+ */
+export async function fetchCompanyProfile(symbol) {
+  if (!API_KEY) return null
+  const res = await fetch(`${BASE}/stock/profile2?symbol=${symbol}&token=${API_KEY}`)
+  if (!res.ok) return null
+  const d = await res.json()
+  if (!d.name) return null
+  return { name: d.name }
+}
+
+/**
  * Extract all unique underlying symbols from a portfolio
  */
 export function getPortfolioSymbols(portfolio) {

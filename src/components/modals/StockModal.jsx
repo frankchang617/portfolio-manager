@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { X, TrendingUp, TrendingDown, Upload, Trash2, AlertTriangle, ChevronUp, ChevronDown, Download, Pencil, Check } from 'lucide-react'
 import { usePortfolio } from '../../contexts/PortfolioContext'
 import { fmt, getPnLClass } from '../../utils/formatters'
+import { fetchCompanyProfile } from '../../utils/api'
 import CalendarPicker from '../CalendarPicker'
 
 // ── Spinner Number Input ─────────────────────────────────────────────────────
@@ -126,6 +127,8 @@ export default function StockModal({ isOpen, onClose, editStock = null }) {
   const [newName, setNewName] = useState('')
   const [newNote, setNewNote] = useState('')
   const [isDragging, setIsDragging] = useState(false)
+  const [nameLookupState, setNameLookupState] = useState('idle') // 'idle' | 'loading' | 'found' | 'notfound'
+  const nameLookupTimer = useRef(null)
   const [editingSymbol, setEditingSymbol] = useState(false)
   const [symbolDraft, setSymbolDraft] = useState('')
   const [nameDraft, setNameDraft] = useState('')
@@ -144,7 +147,7 @@ export default function StockModal({ isOpen, onClose, editStock = null }) {
       setTab(editStock ? 'transactions' : 'new')
       setForm({ action: 'buy', date: new Date().toISOString().split('T')[0], shares: '', price: '', commission: '' })
       setCsvError(''); setCsvPreview([]); setCsvRowErrors([]); setAddError('')
-      setNewSymbol(''); setNewName(''); setNewNote('')
+      setNewSymbol(''); setNewName(''); setNewNote(''); setNameLookupState('idle')
       // Reset uncontrolled symbol input DOM value
       if (symbolInputRef.current) symbolInputRef.current.value = ''
       setEditingSymbol(false); setSymbolDraft(''); setNameDraft(''); setSymbolEditError('')
@@ -297,6 +300,21 @@ export default function StockModal({ isOpen, onClose, editStock = null }) {
     if (!confirm(`确定删除 ${editStock.symbol} 全部持仓？`)) return
     dispatch({ type: 'DELETE_STOCK', portfolioId: activePortfolio.id, stockId: editStock.id })
     onClose()
+  }
+
+  const triggerNameLookup = (sym) => {
+    clearTimeout(nameLookupTimer.current)
+    if (!sym || sym.length < 1) { setNameLookupState('idle'); return }
+    setNameLookupState('loading')
+    nameLookupTimer.current = setTimeout(async () => {
+      const profile = await fetchCompanyProfile(sym)
+      if (profile) {
+        setNewName(prev => prev || profile.name)
+        setNameLookupState('found')
+      } else {
+        setNameLookupState('notfound')
+      }
+    }, 800)
   }
 
   const handleStartEditTx = (tx) => {
@@ -495,20 +513,27 @@ export default function StockModal({ isOpen, onClose, editStock = null }) {
                   const val = e.target.value.toUpperCase().replace(/[^A-Z0-9.]/g, '')
                   e.target.value = val
                   setNewSymbol(val)
+                  triggerNameLookup(val)
                 }}
                 onChange={e => {
                   if (symbolComposingRef.current) return
                   const val = e.target.value.toUpperCase().replace(/[^A-Z0-9.]/g, '')
                   e.target.value = val
                   setNewSymbol(val)
+                  triggerNameLookup(val)
                 }}
                 placeholder="如 AAPL"
                 autoFocus
               />
             </div>
             <div>
-              <label className="label">公司名称（可选）</label>
-              <input className="input" value={newName} onChange={e => setNewName(e.target.value)} placeholder="自动填写" />
+              <label className="label">
+                公司名称（可选）
+                {nameLookupState === 'loading' && <span className="ml-2 text-claude-subtle text-xs">查询中…</span>}
+                {nameLookupState === 'found' && <span className="ml-2 text-profit text-xs">✓ 已自动填写</span>}
+                {nameLookupState === 'notfound' && <span className="ml-2 text-claude-subtle text-xs">未找到，可手动填写</span>}
+              </label>
+              <input className="input" value={newName} onChange={e => setNewName(e.target.value)} placeholder="输入代码后自动填写" />
             </div>
           </div>
         )}
