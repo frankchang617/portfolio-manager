@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, TrendingUp, TrendingDown, Upload, Trash2, AlertTriangle, ChevronUp, ChevronDown, Download } from 'lucide-react'
+import { X, TrendingUp, TrendingDown, Upload, Trash2, AlertTriangle, ChevronUp, ChevronDown, Download, Pencil, Check } from 'lucide-react'
 import { usePortfolio } from '../../contexts/PortfolioContext'
 import { fmt, getPnLClass } from '../../utils/formatters'
 import CalendarPicker from '../CalendarPicker'
@@ -126,9 +126,15 @@ export default function StockModal({ isOpen, onClose, editStock = null }) {
   const [newName, setNewName] = useState('')
   const [newNote, setNewNote] = useState('')
   const [isDragging, setIsDragging] = useState(false)
+  const [editingSymbol, setEditingSymbol] = useState(false)
+  const [symbolDraft, setSymbolDraft] = useState('')
+  const [nameDraft, setNameDraft] = useState('')
+  const [symbolEditError, setSymbolEditError] = useState('')
   const fileRef = useRef(null)
   const symbolInputRef = useRef(null)
   const symbolComposingRef = useRef(false)
+  const symbolEditRef = useRef(null)
+  const symbolComposingEditRef = useRef(false)
 
   useEffect(() => {
     if (isOpen) {
@@ -138,15 +144,21 @@ export default function StockModal({ isOpen, onClose, editStock = null }) {
       setNewSymbol(''); setNewName(''); setNewNote('')
       // Reset uncontrolled symbol input DOM value
       if (symbolInputRef.current) symbolInputRef.current.value = ''
+      setEditingSymbol(false); setSymbolDraft(''); setNameDraft(''); setSymbolEditError('')
     }
   }, [isOpen, editStock])
 
   // key-close
   useEffect(() => {
-    const handler = e => { if (e.key === 'Escape') onClose() }
+    const handler = e => {
+      if (e.key === 'Escape') {
+        if (editingSymbol) { setEditingSymbol(false); setSymbolEditError(''); return }
+        onClose()
+      }
+    }
     if (isOpen) window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [isOpen, onClose])
+  }, [isOpen, onClose, editingSymbol])
 
   if (!isOpen) return null
 
@@ -282,6 +294,19 @@ export default function StockModal({ isOpen, onClose, editStock = null }) {
     onClose()
   }
 
+  const handleSaveSymbol = () => {
+    const sym = symbolDraft.trim().toUpperCase()
+    if (!sym) return setSymbolEditError('股票代码不能为空')
+    dispatch({
+      type: 'UPDATE_STOCK',
+      portfolioId: activePortfolio.id,
+      stockId: editStock.id,
+      updates: { symbol: sym, name: nameDraft.trim() || sym },
+    })
+    setEditingSymbol(false)
+    setSymbolEditError('')
+  }
+
   const downloadTemplate = () => {
     const sym = (editStock?.symbol || newSymbol.trim().toUpperCase() || 'AAPL')
     const rows = [
@@ -309,12 +334,61 @@ export default function StockModal({ isOpen, onClose, editStock = null }) {
 
         {/* ── Header ── */}
         <div className="flex items-start justify-between px-6 pt-6 pb-4 flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <h2 className="text-2xl font-bold text-claude-text">{title}</h2>
-            {editStock && (
-              <span className="px-3 py-1 bg-gray-100 text-claude-muted text-sm rounded-full font-medium">
-                持仓 {editStock.shares} 股
-              </span>
+          <div className="flex items-center gap-3 flex-wrap">
+            {editStock && editingSymbol ? (
+              <div className="flex items-center gap-2 flex-wrap">
+                <input
+                  ref={symbolEditRef}
+                  value={symbolDraft}
+                  onCompositionStart={() => { symbolComposingEditRef.current = true }}
+                  onCompositionEnd={e => {
+                    symbolComposingEditRef.current = false
+                    const val = e.target.value.toUpperCase().replace(/[^A-Z0-9.]/g, '')
+                    setSymbolDraft(val)
+                  }}
+                  onChange={e => {
+                    if (symbolComposingEditRef.current) return
+                    const val = e.target.value.toUpperCase().replace(/[^A-Z0-9.]/g, '')
+                    setSymbolDraft(val)
+                  }}
+                  className="text-xl font-bold border-b-2 border-claude-orange bg-transparent outline-none w-28 text-claude-text"
+                  placeholder={editStock.symbol}
+                  autoFocus
+                />
+                <input
+                  value={nameDraft}
+                  onChange={e => setNameDraft(e.target.value)}
+                  className="text-sm text-claude-muted border-b border-claude-border bg-transparent outline-none w-36"
+                  placeholder={editStock.name || '公司名称（可选）'}
+                />
+                <button onClick={handleSaveSymbol}
+                  className="p-1.5 rounded-lg bg-blue-100 text-blue-600 hover:bg-blue-200 transition-colors">
+                  <Check size={14} />
+                </button>
+                <button onClick={() => { setEditingSymbol(false); setSymbolEditError('') }}
+                  className="p-1.5 rounded-lg hover:bg-gray-100 text-claude-muted transition-colors">
+                  <X size={14} />
+                </button>
+                {symbolEditError && (
+                  <span className="text-xs text-loss">{symbolEditError}</span>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <h2 className="text-2xl font-bold text-claude-text">{title}</h2>
+                {editStock && (
+                  <button
+                    onClick={() => { setSymbolDraft(editStock.symbol); setNameDraft(editStock.name || ''); setEditingSymbol(true) }}
+                    className="p-1 rounded-lg hover:bg-gray-100 text-claude-subtle hover:text-claude-muted transition-colors">
+                    <Pencil size={14} />
+                  </button>
+                )}
+                {editStock && (
+                  <span className="px-3 py-1 bg-gray-100 text-claude-muted text-sm rounded-full font-medium">
+                    持仓 {editStock.shares} 股
+                  </span>
+                )}
+              </div>
             )}
           </div>
           <button onClick={onClose} className="p-2 rounded-xl hover:bg-claude-bg text-claude-muted hover:text-claude-text transition-colors">
