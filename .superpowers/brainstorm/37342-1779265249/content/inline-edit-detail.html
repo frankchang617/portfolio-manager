@@ -1,0 +1,193 @@
+<h2>行内编辑 — 布局细化</h2>
+<p class="subtitle">点击编辑后，该行展开为宽松的输入区域，选择您偏好的样式</p>
+
+<div class="cards" style="display:flex;flex-direction:column;gap:28px;margin-top:24px;">
+
+  <!-- 方案 A1：行下方展开编辑区（推荐） -->
+  <div class="card" data-choice="a1" onclick="toggleSelect(this)" style="padding:0;overflow:hidden;border-radius:16px;cursor:pointer;">
+    <div style="padding:14px 20px 10px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:2px;">
+        <div style="width:26px;height:26px;border-radius:50%;background:#3b82f6;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0;">A1</div>
+        <h3 style="margin:0;font-size:14px;font-weight:700;">行内展开表单（推荐）</h3>
+        <span style="margin-left:auto;font-size:11px;background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:20px;font-weight:600;">推荐</span>
+      </div>
+      <p style="margin:0 0 0 36px;font-size:12px;color:#6b7280;">点击 ✏️ 后，原行变为高亮摘要 + 下方展开宽松表单；不切换 Tab，空间充裕</p>
+    </div>
+    <div style="background:#f9fafb;padding:14px 20px;border-top:1px solid #e5e7eb;">
+      <!-- 表头 -->
+      <div style="font-size:11px;font-weight:600;color:#9ca3af;display:grid;grid-template-columns:110px 72px 1fr 1fr 1fr 64px 56px;gap:8px;padding-bottom:7px;border-bottom:1px solid #e5e7eb;margin-bottom:4px;">
+        <span>日期</span><span>类型</span><span style="text-align:right;">数量</span><span style="text-align:right;">价格</span><span style="text-align:right;">总额</span><span style="text-align:right;">手续费</span><span></span>
+      </div>
+      <!-- 普通行 -->
+      <div style="display:grid;grid-template-columns:110px 72px 1fr 1fr 1fr 64px 56px;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid #f3f4f6;font-size:12px;">
+        <span style="color:#6b7280;">Jan 15, 2024</span>
+        <span><span style="background:#dcfce7;color:#16a34a;padding:2px 7px;border-radius:6px;font-size:11px;white-space:nowrap;">↗ 买入</span></span>
+        <span style="text-align:right;font-family:monospace;">100.00</span>
+        <span style="text-align:right;font-family:monospace;">$185.50</span>
+        <span style="text-align:right;font-family:monospace;color:#16a34a;">+$18,550</span>
+        <span style="text-align:right;color:#9ca3af;font-family:monospace;">—</span>
+        <span style="display:flex;gap:3px;justify-content:flex-end;">
+          <button style="padding:4px 6px;border:1px solid #d1d5db;border-radius:6px;background:#fff;color:#6b7280;font-size:11px;">✏️</button>
+          <button style="padding:4px 6px;border:1px solid #fecaca;border-radius:6px;background:#fff;color:#ef4444;font-size:11px;">🗑</button>
+        </span>
+      </div>
+
+      <!-- 正在编辑的行：摘要 + 展开表单 -->
+      <div style="border:1.5px solid #93c5fd;border-radius:12px;background:#f0f9ff;margin:6px 0;overflow:hidden;">
+        <!-- 摘要行 -->
+        <div style="display:grid;grid-template-columns:110px 72px 1fr 1fr 1fr 64px 56px;gap:8px;align-items:center;padding:7px 12px;font-size:12px;background:#dbeafe;">
+          <span style="color:#1d4ed8;font-weight:600;">Mar 20, 2024</span>
+          <span><span style="background:#bfdbfe;color:#1d4ed8;padding:2px 7px;border-radius:6px;font-size:11px;white-space:nowrap;">↗ 买入</span></span>
+          <span style="text-align:right;font-family:monospace;color:#1d4ed8;">50.00</span>
+          <span style="text-align:right;font-family:monospace;color:#1d4ed8;">$171.25</span>
+          <span style="text-align:right;font-family:monospace;color:#1d4ed8;">+$8,562</span>
+          <span style="text-align:right;font-family:monospace;color:#93c5fd;">—</span>
+          <span style="display:flex;justify-content:flex-end;align-items:center;">
+            <span style="font-size:10px;color:#3b82f6;font-weight:600;">编辑中…</span>
+          </span>
+        </div>
+        <!-- 展开的表单 -->
+        <div style="padding:16px 16px 14px;border-top:1px solid #bfdbfe;">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px;">
+            <div>
+              <label style="font-size:11px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">交易类型</label>
+              <select style="width:100%;padding:8px 10px;border:1.5px solid #3b82f6;border-radius:10px;font-size:13px;background:#fff;outline:none;color:#374151;">
+                <option>↗ 买入</option><option>↘ 卖出</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">交易日期</label>
+              <input value="2024-03-20" style="width:100%;padding:8px 10px;border:1.5px solid #3b82f6;border-radius:10px;font-size:13px;box-sizing:border-box;outline:none;font-family:monospace;"/>
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">数量（股）</label>
+              <input value="50" style="width:100%;padding:8px 10px;border:1.5px solid #3b82f6;border-radius:10px;font-size:13px;box-sizing:border-box;outline:none;font-family:monospace;text-align:right;"/>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
+            <div>
+              <label style="font-size:11px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">交易价格（$）</label>
+              <input value="171.25" style="width:100%;padding:8px 10px;border:1.5px solid #3b82f6;border-radius:10px;font-size:13px;box-sizing:border-box;outline:none;font-family:monospace;text-align:right;"/>
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:600;color:#374151;display:block;margin-bottom:5px;">手续费（$，可选）</label>
+              <input value="0.00" style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:10px;font-size:13px;box-sizing:border-box;outline:none;font-family:monospace;text-align:right;"/>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;">
+            <button style="flex:1;padding:9px;background:#3b82f6;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;">保存修改</button>
+            <button style="padding:9px 20px;background:#f3f4f6;color:#6b7280;border:none;border-radius:10px;font-size:13px;cursor:pointer;">取消</button>
+            <span style="margin-left:auto;font-size:12px;color:#6b7280;">总额：<strong style="color:#16a34a;">+$8,562.50</strong></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 普通行3 -->
+      <div style="display:grid;grid-template-columns:110px 72px 1fr 1fr 1fr 64px 56px;gap:8px;align-items:center;padding:7px 0;font-size:12px;">
+        <span style="color:#6b7280;">Jun 10, 2024</span>
+        <span><span style="background:#fee2e2;color:#dc2626;padding:2px 7px;border-radius:6px;font-size:11px;white-space:nowrap;">↘ 卖出</span></span>
+        <span style="text-align:right;font-family:monospace;">30.00</span>
+        <span style="text-align:right;font-family:monospace;">$195.80</span>
+        <span style="text-align:right;font-family:monospace;color:#dc2626;">-$5,874</span>
+        <span style="text-align:right;color:#9ca3af;font-family:monospace;">—</span>
+        <span style="display:flex;gap:3px;justify-content:flex-end;">
+          <button style="padding:4px 6px;border:1px solid #d1d5db;border-radius:6px;background:#fff;color:#6b7280;font-size:11px;">✏️</button>
+          <button style="padding:4px 6px;border:1px solid #fecaca;border-radius:6px;background:#fff;color:#ef4444;font-size:11px;">🗑</button>
+        </span>
+      </div>
+    </div>
+    <div style="padding:10px 20px 12px;background:#f9fafb;border-top:1px solid #e5e7eb;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:12px;">
+        <div><span style="color:#16a34a;font-weight:600;">✓ </span>输入框充裕，内容完整可见<br/><span style="color:#16a34a;font-weight:600;">✓ </span>有字段标签，不易误填<br/><span style="color:#16a34a;font-weight:600;">✓ </span>实时显示总额预览</div>
+        <div><span style="color:#dc2626;font-weight:600;">✗ </span>编辑时行高增大<br/><span style="color:#6b7280;">（仅影响当前编辑行，其他行正常）</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 方案 A2：弹出小浮层 -->
+  <div class="card" data-choice="a2" onclick="toggleSelect(this)" style="padding:0;overflow:hidden;border-radius:16px;cursor:pointer;">
+    <div style="padding:14px 20px 10px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:2px;">
+        <div style="width:26px;height:26px;border-radius:50%;background:#8b5cf6;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0;">A2</div>
+        <h3 style="margin:0;font-size:14px;font-weight:700;">行旁浮层弹出</h3>
+      </div>
+      <p style="margin:0 0 0 36px;font-size:12px;color:#6b7280;">点击 ✏️ 后，在该行旁边弹出一个浮层卡片，不影响表格布局</p>
+    </div>
+    <div style="background:#f9fafb;padding:14px 20px;border-top:1px solid #e5e7eb;position:relative;">
+      <!-- 表头 -->
+      <div style="font-size:11px;font-weight:600;color:#9ca3af;display:grid;grid-template-columns:110px 72px 1fr 1fr 1fr 64px 56px;gap:8px;padding-bottom:7px;border-bottom:1px solid #e5e7eb;margin-bottom:4px;">
+        <span>日期</span><span>类型</span><span style="text-align:right;">数量</span><span style="text-align:right;">价格</span><span style="text-align:right;">总额</span><span style="text-align:right;">手续费</span><span></span>
+      </div>
+      <div style="display:grid;grid-template-columns:110px 72px 1fr 1fr 1fr 64px 56px;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid #f3f4f6;font-size:12px;">
+        <span style="color:#6b7280;">Jan 15, 2024</span>
+        <span><span style="background:#dcfce7;color:#16a34a;padding:2px 7px;border-radius:6px;font-size:11px;">↗ 买入</span></span>
+        <span style="text-align:right;font-family:monospace;">100.00</span>
+        <span style="text-align:right;font-family:monospace;">$185.50</span>
+        <span style="text-align:right;font-family:monospace;color:#16a34a;">+$18,550</span>
+        <span style="text-align:right;color:#9ca3af;">—</span>
+        <span style="display:flex;gap:3px;justify-content:flex-end;">
+          <button style="padding:4px 6px;border:1px solid #d1d5db;border-radius:6px;background:#fff;color:#6b7280;font-size:11px;">✏️</button>
+          <button style="padding:4px 6px;border:1px solid #fecaca;border-radius:6px;background:#fff;color:#ef4444;font-size:11px;">🗑</button>
+        </span>
+      </div>
+      <!-- 高亮行 + 浮层 -->
+      <div style="position:relative;">
+        <div style="display:grid;grid-template-columns:110px 72px 1fr 1fr 1fr 64px 56px;gap:8px;align-items:center;padding:7px 10px;border-radius:8px;background:#f5f3ff;border:1.5px solid #a78bfa;font-size:12px;">
+          <span style="color:#7c3aed;font-weight:600;">Mar 20, 2024</span>
+          <span><span style="background:#ede9fe;color:#7c3aed;padding:2px 7px;border-radius:6px;font-size:11px;">↗ 买入</span></span>
+          <span style="text-align:right;font-family:monospace;color:#7c3aed;">50.00</span>
+          <span style="text-align:right;font-family:monospace;color:#7c3aed;">$171.25</span>
+          <span style="text-align:right;font-family:monospace;color:#7c3aed;">+$8,562</span>
+          <span style="text-align:right;color:#c4b5fd;">—</span>
+          <span style="display:flex;gap:3px;justify-content:flex-end;">
+            <button style="padding:4px 6px;border:1.5px solid #7c3aed;border-radius:6px;background:#ede9fe;color:#7c3aed;font-size:11px;font-weight:bold;">✏️</button>
+          </span>
+        </div>
+        <!-- 浮层 -->
+        <div style="position:absolute;right:0;top:calc(100% + 6px);width:320px;background:#fff;border-radius:14px;border:1.5px solid #a78bfa;padding:16px;box-shadow:0 8px 24px rgba(0,0,0,0.12);z-index:10;">
+          <p style="margin:0 0 12px;font-size:12px;font-weight:700;color:#7c3aed;">✏️ 编辑交易记录</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+            <div><label style="font-size:10px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">交易类型</label>
+              <select style="width:100%;padding:7px 8px;border:1.5px solid #d1d5db;border-radius:8px;font-size:12px;outline:none;"><option>↗ 买入</option><option>↘ 卖出</option></select></div>
+            <div><label style="font-size:10px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">交易日期</label>
+              <input value="2024-03-20" style="width:100%;padding:7px 8px;border:1.5px solid #d1d5db;border-radius:8px;font-size:12px;box-sizing:border-box;outline:none;font-family:monospace;"/></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px;">
+            <div><label style="font-size:10px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">数量</label>
+              <input value="50" style="width:100%;padding:7px 8px;border:1.5px solid #d1d5db;border-radius:8px;font-size:12px;box-sizing:border-box;outline:none;font-family:monospace;text-align:right;"/></div>
+            <div><label style="font-size:10px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">价格</label>
+              <input value="171.25" style="width:100%;padding:7px 8px;border:1.5px solid #d1d5db;border-radius:8px;font-size:12px;box-sizing:border-box;outline:none;font-family:monospace;text-align:right;"/></div>
+            <div><label style="font-size:10px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">手续费</label>
+              <input value="0.00" style="width:100%;padding:7px 8px;border:1.5px solid #d1d5db;border-radius:8px;font-size:12px;box-sizing:border-box;outline:none;font-family:monospace;text-align:right;"/></div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button style="flex:1;padding:8px;background:#7c3aed;color:#fff;border:none;border-radius:9px;font-size:12px;font-weight:600;cursor:pointer;">保存</button>
+            <button style="padding:8px 14px;background:#f3f4f6;color:#6b7280;border:none;border-radius:9px;font-size:12px;cursor:pointer;">取消</button>
+          </div>
+        </div>
+      </div>
+      <div style="height:160px;"></div><!-- 给浮层留空间 -->
+      <div style="display:grid;grid-template-columns:110px 72px 1fr 1fr 1fr 64px 56px;gap:8px;align-items:center;padding:7px 0;font-size:12px;">
+        <span style="color:#6b7280;">Jun 10, 2024</span>
+        <span><span style="background:#fee2e2;color:#dc2626;padding:2px 7px;border-radius:6px;font-size:11px;">↘ 卖出</span></span>
+        <span style="text-align:right;font-family:monospace;">30.00</span>
+        <span style="text-align:right;font-family:monospace;">$195.80</span>
+        <span style="text-align:right;font-family:monospace;color:#dc2626;">-$5,874</span>
+        <span style="text-align:right;color:#9ca3af;">—</span>
+        <span style="display:flex;gap:3px;justify-content:flex-end;">
+          <button style="padding:4px 6px;border:1px solid #d1d5db;border-radius:6px;background:#fff;color:#6b7280;font-size:11px;">✏️</button>
+          <button style="padding:4px 6px;border:1px solid #fecaca;border-radius:6px;background:#fff;color:#ef4444;font-size:11px;">🗑</button>
+        </span>
+      </div>
+    </div>
+    <div style="padding:10px 20px 12px;background:#f9fafb;border-top:1px solid #e5e7eb;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:12px;">
+        <div><span style="color:#16a34a;font-weight:600;">✓ </span>表格行高不变<br/><span style="color:#16a34a;font-weight:600;">✓ </span>浮层空间完全充裕</div>
+        <div><span style="color:#dc2626;font-weight:600;">✗ </span>浮层可能超出模态框边界<br/><span style="color:#dc2626;font-weight:600;">✗ </span>实现略复杂</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<p style="text-align:center;margin-top:20px;font-size:13px;color:#9ca3af;">两种都是「行内编辑」，区别在于表单位置。点击选择，然后告诉我。</p>
