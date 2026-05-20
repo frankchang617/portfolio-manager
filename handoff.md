@@ -1,6 +1,6 @@
 # 投资组合管理系统 — 任务交接文档
 
-**更新日期**：2026-05-18（第十五次，持仓页合并 + 总资产横幅加入期权数据）  
+**更新日期**：2026-05-20（第十六次，持仓编辑增强 + 自动填写公司名称）  
 **技术栈**：React 18 + Vite + Tailwind CSS v3 + Recharts  
 **运行地址**：http://localhost:5173（`npm run dev` 启动）
 
@@ -45,9 +45,30 @@ getComputedStyle(document.documentElement).getPropertyValue('--claude-card')
 
 ---
 
-## 本次已完成的功能
+## 本次已完成的功能（2026-05-20）
 
-### 持仓页合并 + 总资产横幅加入期权数据（本次）
+### 持仓编辑增强
+- **`src/contexts/PortfolioContext.jsx`**：新增 `UPDATE_STOCK_TRANSACTION` action，更新指定交易记录后调用 `calcPosition` 重算持仓
+- **`src/components/StockPositions.jsx`**：`盈亏 %` 改名 `账面盈亏%`；新增 `总盈亏`（账面+已实现）和 `总盈亏%` 两列；排序栏同步
+- **`src/components/modals/StockModal.jsx`**：
+  - 编辑模式标题旁加 ✏️，点击可内联修改股票代码和公司名称（`UPDATE_STOCK` action）
+  - 交易记录每行 hover 显示 ✏️/🗑️，点击 ✏️ 展开 A1 宽松表单（类型/日期/数量/价格/手续费），保存后均价自动重算
+  - 添加股票时，输入代码 800ms 后自动查询 Finnhub profile2，将公司名称填入名称字段
+
+### 自动填写公司名称
+- **`src/utils/api.js`**：新增 `fetchCompanyProfile(symbol)` 函数
+- **`src/components/modals/StockModal.jsx`**：股票代码输入框 onChange 触发防抖查询，标签旁显示「查询中…」/「✓ 已自动填写」/「未找到」状态；仅在用户未手动填写时才覆盖名称字段
+
+### 关键决策
+- 行内编辑采用 A1「展开表单」方案（用户确认，相比弹层/切换 Tab 更直观）
+- 总盈亏% 分母：持仓中用 `costBasis`，已清仓用 `totalBuyValue`
+- 自动填写仅在 `prev || profile.name` 逻辑下生效，不覆盖用户手动输入
+
+---
+
+## 历史已完成功能
+
+### 持仓页合并 + 总资产横幅加入期权数据（上次）
 - **`src/components/StockPositions.jsx`**：
   - 顶部新增「💼 投资组合总资产」横幅，计算逻辑：`总资产 = 股票市值 + 现金余额 + 期权未实现盈亏`
   - 横幅右侧显示「股票持仓」「现金余额」「期权未实现盈亏（N 个）」三列及各自占比；有已实现期权盈亏时额外显示第四列
