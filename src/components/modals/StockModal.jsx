@@ -130,6 +130,9 @@ export default function StockModal({ isOpen, onClose, editStock = null }) {
   const [symbolDraft, setSymbolDraft] = useState('')
   const [nameDraft, setNameDraft] = useState('')
   const [symbolEditError, setSymbolEditError] = useState('')
+  const [editingTxId, setEditingTxId] = useState(null)
+  const [editForm, setEditForm] = useState({ action: 'buy', date: '', shares: '', price: '', commission: '' })
+  const [editError, setEditError] = useState('')
   const fileRef = useRef(null)
   const symbolInputRef = useRef(null)
   const symbolComposingRef = useRef(false)
@@ -145,6 +148,7 @@ export default function StockModal({ isOpen, onClose, editStock = null }) {
       // Reset uncontrolled symbol input DOM value
       if (symbolInputRef.current) symbolInputRef.current.value = ''
       setEditingSymbol(false); setSymbolDraft(''); setNameDraft(''); setSymbolEditError('')
+      setEditingTxId(null); setEditForm({ action: 'buy', date: '', shares: '', price: '', commission: '' }); setEditError('')
     }
   }, [isOpen, editStock])
 
@@ -152,13 +156,14 @@ export default function StockModal({ isOpen, onClose, editStock = null }) {
   useEffect(() => {
     const handler = e => {
       if (e.key === 'Escape') {
+        if (editingTxId) { handleCancelEditTx(); return }
         if (editingSymbol) { setEditingSymbol(false); setSymbolEditError(''); return }
         onClose()
       }
     }
     if (isOpen) window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [isOpen, onClose, editingSymbol])
+  }, [isOpen, onClose, editingTxId, editingSymbol])
 
   if (!isOpen) return null
 
@@ -292,6 +297,48 @@ export default function StockModal({ isOpen, onClose, editStock = null }) {
     if (!confirm(`确定删除 ${editStock.symbol} 全部持仓？`)) return
     dispatch({ type: 'DELETE_STOCK', portfolioId: activePortfolio.id, stockId: editStock.id })
     onClose()
+  }
+
+  const handleStartEditTx = (tx) => {
+    setEditingTxId(tx.id)
+    setEditError('')
+    setEditForm({
+      action: tx.action,
+      date: tx.date,
+      shares: String(tx.shares),
+      price: String(tx.price),
+      commission: String(tx.commission ?? 0),
+    })
+  }
+
+  const handleCancelEditTx = () => {
+    setEditingTxId(null)
+    setEditError('')
+    setEditForm({ action: 'buy', date: '', shares: '', price: '', commission: '' })
+  }
+
+  const handleSaveEditTx = () => {
+    setEditError('')
+    const shares = parseFloat(editForm.shares)
+    const price = parseFloat(editForm.price)
+    if (!editForm.date) return setEditError('请选择交易日期')
+    if (!shares || shares <= 0) return setEditError('请输入有效数量')
+    if (!price || price <= 0) return setEditError('请输入有效价格')
+    dispatch({
+      type: 'UPDATE_STOCK_TRANSACTION',
+      portfolioId: activePortfolio.id,
+      stockId: editStock.id,
+      transactionId: editingTxId,
+      updates: {
+        action: editForm.action,
+        date: editForm.date,
+        shares,
+        price,
+        commission: parseFloat(editForm.commission) || 0,
+        total: price * shares,
+      },
+    })
+    handleCancelEditTx()
   }
 
   const handleSaveSymbol = () => {
@@ -533,33 +580,119 @@ export default function StockModal({ isOpen, onClose, editStock = null }) {
                   <tbody>
                     {[...transactions]
                       .sort((a, b) => new Date(b.date) - new Date(a.date))
-                      .map(t => (
-                        <tr key={t.id} className="border-b border-claude-border/50 hover:bg-gray-50 group">
-                          <td className="py-3 pr-4 text-sm text-claude-muted">
-                            {new Date(t.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                          </td>
-                          <td className="py-3 pr-4">
-                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium
-                              ${t.action === 'buy' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
-                              {t.action === 'buy' ? '↗ 买入' : '↘ 卖出'}
-                            </span>
-                          </td>
-                          <td className="py-3 pr-4 text-sm text-right font-mono">{t.shares.toFixed(2)}</td>
-                          <td className="py-3 pr-4 text-sm text-right font-mono">{fmt.currency(t.price)}</td>
-                          <td className={`py-3 pr-4 text-sm text-right font-mono font-semibold ${t.action === 'buy' ? 'text-profit' : 'text-loss'}`}>
-                            {t.action === 'buy' ? '+' : '-'}{fmt.currency(t.price * t.shares)}
-                          </td>
-                          <td className="py-3 text-sm text-right font-mono text-claude-muted">
-                            {t.commission > 0 ? fmt.currency(t.commission) : <span className="text-claude-subtle">—</span>}
-                          </td>
-                          <td className="py-3 pl-2">
-                            <button onClick={() => handleDelete(t.id)}
-                              className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-red-50 text-claude-subtle hover:text-loss transition-all">
-                              <Trash2 size={13} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                      .map(t => {
+                        const isEditing = editingTxId === t.id
+                        if (isEditing) {
+                          const previewShares = parseFloat(editForm.shares)
+                          const previewPrice = parseFloat(editForm.price)
+                          const previewTotal = previewShares > 0 && previewPrice > 0 ? previewShares * previewPrice : null
+                          return (
+                            <tr key={t.id}>
+                              <td colSpan={7} className="py-0 px-0">
+                                {/* 蓝色摘要条 */}
+                                <div className="bg-blue-50 border-l-4 border-blue-400 px-4 py-2.5 flex items-center gap-4 text-sm">
+                                  <span className="text-blue-600 font-semibold text-xs">编辑中</span>
+                                  <span className="text-claude-muted font-mono text-xs">
+                                    {new Date(t.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                  </span>
+                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium
+                                    ${t.action === 'buy' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                                    {t.action === 'buy' ? '↗ 买入' : '↘ 卖出'}
+                                  </span>
+                                  <span className="font-mono text-xs text-claude-muted">{t.shares.toFixed(2)} 股 @ {fmt.currency(t.price)}</span>
+                                </div>
+                                {/* 展开的编辑表单 */}
+                                <div className="bg-white border-l-4 border-blue-400 border-t border-claude-border/50 px-4 py-4">
+                                  <div className="grid grid-cols-3 gap-4 mb-4">
+                                    <div>
+                                      <label className="label">交易类型</label>
+                                      <select className="select" value={editForm.action}
+                                        onChange={e => setEditForm(f => ({ ...f, action: e.target.value }))}>
+                                        <option value="buy">买入 ↗</option>
+                                        <option value="sell">卖出 ↘</option>
+                                      </select>
+                                    </div>
+                                    <div>
+                                      <label className="label">交易日期</label>
+                                      <CalendarPicker value={editForm.date} onChange={v => setEditForm(f => ({ ...f, date: v }))} />
+                                    </div>
+                                    <div>
+                                      <label className="label">数量（股）</label>
+                                      <SpinnerInput value={editForm.shares} onChange={v => setEditForm(f => ({ ...f, shares: v }))}
+                                        step={1} placeholder="0" />
+                                    </div>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-4 mb-4">
+                                    <div>
+                                      <label className="label">交易价格</label>
+                                      <SpinnerInput value={editForm.price} onChange={v => setEditForm(f => ({ ...f, price: v }))}
+                                        prefix="$" step={0.01} placeholder="0.00" />
+                                    </div>
+                                    <div>
+                                      <label className="label">手续费（可选）</label>
+                                      <SpinnerInput value={editForm.commission} onChange={v => setEditForm(f => ({ ...f, commission: v }))}
+                                        prefix="$" step={0.01} placeholder="0.00" />
+                                    </div>
+                                  </div>
+                                  {editError && (
+                                    <p className="text-sm text-loss bg-red-50 px-3 py-2 rounded-lg mb-3">{editError}</p>
+                                  )}
+                                  <div className="flex items-center gap-3">
+                                    <button onClick={handleSaveEditTx}
+                                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl transition-colors text-sm">
+                                      保存修改
+                                    </button>
+                                    <button onClick={handleCancelEditTx}
+                                      className="px-5 py-2.5 border border-claude-border rounded-xl text-sm font-medium text-claude-muted hover:text-claude-text hover:bg-claude-bg transition-colors">
+                                      取消
+                                    </button>
+                                    {previewTotal != null && (
+                                      <span className="ml-auto text-sm text-claude-muted">
+                                        总额：<strong className={editForm.action === 'buy' ? 'text-profit' : 'text-loss'}>
+                                          {editForm.action === 'buy' ? '+' : '-'}{fmt.currency(previewTotal)}
+                                        </strong>
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        }
+                        return (
+                          <tr key={t.id} className="border-b border-claude-border/50 hover:bg-gray-50 group">
+                            <td className="py-3 pr-4 text-sm text-claude-muted">
+                              {new Date(t.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </td>
+                            <td className="py-3 pr-4">
+                              <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium
+                                ${t.action === 'buy' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                                {t.action === 'buy' ? '↗ 买入' : '↘ 卖出'}
+                              </span>
+                            </td>
+                            <td className="py-3 pr-4 text-sm text-right font-mono">{t.shares.toFixed(2)}</td>
+                            <td className="py-3 pr-4 text-sm text-right font-mono">{fmt.currency(t.price)}</td>
+                            <td className={`py-3 pr-4 text-sm text-right font-mono font-semibold ${t.action === 'buy' ? 'text-profit' : 'text-loss'}`}>
+                              {t.action === 'buy' ? '+' : '-'}{fmt.currency(t.price * t.shares)}
+                            </td>
+                            <td className="py-3 text-sm text-right font-mono text-claude-muted">
+                              {t.commission > 0 ? fmt.currency(t.commission) : <span className="text-claude-subtle">—</span>}
+                            </td>
+                            <td className="py-3 pl-2">
+                              <div className="opacity-0 group-hover:opacity-100 flex gap-1 justify-end transition-opacity">
+                                <button onClick={() => handleStartEditTx(t)}
+                                  className="p-1.5 rounded-lg hover:bg-blue-50 text-claude-subtle hover:text-blue-600 transition-all">
+                                  <Pencil size={13} />
+                                </button>
+                                <button onClick={() => handleDelete(t.id)}
+                                  className="p-1.5 rounded-lg hover:bg-red-50 text-claude-subtle hover:text-loss transition-all">
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
                   </tbody>
                 </table>
               )}
