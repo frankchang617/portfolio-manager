@@ -1,8 +1,121 @@
 # 投资组合管理系统 — 任务交接文档
 
-**更新日期**：2026-05-20（第十六次，持仓编辑增强 + 自动填写公司名称）  
-**技术栈**：React 18 + Vite + Tailwind CSS v3 + Recharts  
-**运行地址**：http://localhost:5173（`npm run dev` 启动）
+**更新日期**：2026-05-21（第二十一次，GitHub Pages 部署 + 深色模式修复 + Supabase 同步竞态修复）  
+**技术栈**：React 18 + Vite + Tailwind CSS v3 + Recharts + Supabase  
+**运行地址**：http://localhost:5173（本地）/ https://frankchang617.github.io/portfolio-manager/（公网）
+
+---
+
+## 本次已完成的功能（2026-05-21，第二十一次）
+
+### 1. GitHub Pages 部署
+
+- **仓库**：`github.com/frankchang617/portfolio-manager`（public）
+- **访问地址**：`frankchang617.github.io/portfolio-manager/`
+- **`vite.config.js`**：新增 `base: '/portfolio-manager/'`
+- **`.github/workflows/deploy.yml`**：push to main 自动触发 build → deploy
+  - Node 20 + npm ci + vite build → `actions/deploy-pages@v4`
+  - 三个 Secrets 通过 GitHub repo Settings 配置：`VITE_SUPABASE_URL`、`VITE_SUPABASE_ANON_KEY`、`VITE_FINNHUB_KEY`
+- **已提交关键文件**：`src/lib/supabase.js`、`package.json`（含 `@supabase/supabase-js`）、`src/contexts/PortfolioContext.jsx`（之前均未提交到 git）
+
+### 2. Supabase 同步竞态 Bug 修复
+
+**根本原因**：GitHub Pages 首次加载时 localStorage 为空，初始化空状态后，state 变化的 `useEffect` 在 1.5s 内把空状态写入 Supabase，**覆盖了真实数据**。
+
+**修复（`src/contexts/PortfolioContext.jsx`）**：
+
+新增 `hasRealData(data)` 函数：
+```js
+function hasRealData(data) {
+  if (!data?.portfolios?.length) return false
+  return data.portfolios.some(p => !p.isAggregate && ((p.stocks?.length ?? 0) > 0 || (p.options?.length ?? 0) > 0))
+}
+```
+
+新增 `cloudLoadDoneRef`（`useRef(false)`）：
+- **云端加载完成前**，state 变化的 useEffect 不写云端（`if (!cloudLoadDoneRef.current) return`）
+- **云端有真实数据** → HYDRATE（云端胜出）
+- **云端无真实数据但本地有** → `cloudSave(localData)`（本地推云端）
+- **两者都无真实数据** → HYDRATE 云端结构（保持一致）
+- `.finally()` 中设置 `cloudLoadDoneRef.current = true`，此后 state 变化才允许写云端
+
+### 3. 深色模式 bg-white 修复
+
+将以下组件的 `bg-white` 从 Tailwind class 改为 `style={{ background: 'var(--claude-card)' }}`（CSS 变量更可靠）：
+
+| 文件 | 位置 |
+|------|------|
+| `src/components/Modal.jsx` | 通用 modal 容器 |
+| `src/components/modals/StockModal.jsx` | 股票 modal 容器 |
+| `src/components/modals/OptionsModal.jsx` | 期权 modal 容器 |
+| `src/components/modals/ImportModal.jsx` | 导入 modal 容器 |
+| `src/components/modals/StrategyModal.jsx` | 策略 modal 容器 |
+| `src/components/CalendarPicker.jsx` | 日期输入框 + 日历面板 |
+| `src/components/OptionsPositions.jsx` | 平仓/行权 modal；input 改用 `.input` class |
+| `src/components/Header.jsx` | 组合切换下拉菜单 |
+
+### 4. 深色模式日历文字颜色修复
+
+**`src/components/DailyPnLCalendar.jsx`**：
+- 日期数字：`text-green-900` / `text-red-900` → `profit-text` / `loss-text`
+- 盈亏金额：`text-green-800` / `text-red-800` → `profit-text` / `loss-text`
+（`profit-text`/`loss-text` 已有 `.dark` 覆盖规则）
+
+---
+
+## 当前未完成任务
+
+### 下一步：期权年化报酬率排序功能
+在 `src/components/OptionsPositions.jsx` 的「排序方式」下拉中新增「年化报酬率」选项。
+
+### 深色模式残留问题（次优先）
+部分 `bg-white` 尚未处理（Header 的间隔下拉、Charts tooltip、StockPositions 卡片、Dashboard 卡片）。可在深色模式下逐一测试发现。
+
+---
+
+## 本次已完成的功能（2026-05-21，第二十次）
+
+### Supabase 云端数据同步
+
+**背景**：用户发现通过 PWA（macOS WebKit）打开应用时数据为空，原因是 Chrome localStorage 与 WebKit localStorage 完全隔离；同时希望手机也能访问同一份数据。
+
+#### 新增文件
+
+**`.env.local`**（已加入 `.gitignore` 的 `*.local` 规则，不会提交）：
+```
+VITE_SUPABASE_URL=https://edcuuglmzjimavhjaptp.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJ...（anon key）
+```
+
+**`src/lib/supabase.js`**：
+- `supabase` — createClient 实例
+- `cloudLoad()` — 从 `portfolio_state` 表拉取 `id='default'` 行的 `data` 字段（`.maybeSingle()`，无行时返回 null）
+- `cloudSave(snapshot)` — upsert 同一行
+
+#### Supabase 数据库
+
+- 项目 ID：`edcuuglmzjimavhjaptp`，Region：ap-northeast-1（Tokyo）
+- 表：`portfolio_state`（字段：`id text PK`, `data jsonb`, `updated_at timestamptz`）
+- 无 RLS（个人应用，anon key 可直接读写）
+
+#### `src/contexts/PortfolioContext.jsx` 修改
+
+**新增 import**：`cloudLoad`, `cloudSave` from `../lib/supabase`
+
+**新增 reducer case `HYDRATE`**：
+- 接收云端 data payload，执行与 `loadInitialState` 相同的迁移逻辑（aggregate portfolio 清空 stocks/cash、期权 commission 迁移、sell 交易 realizedPnL 迁移）
+- 替换整个 state（保留 prices: {}, isLoading: false）
+
+**`PortfolioProvider` 新增逻辑**：
+- `syncTimerRef`：用于防抖云端保存的 timer ref
+- 首次挂载 `useEffect`：调用 `cloudLoad()`
+  - 云端有数据（portfolios.length > 0）→ dispatch `HYDRATE` 覆盖本地状态
+  - 云端为空 → 将当前 localStorage 数据上传（首次迁移）
+- 状态变化 `useEffect`：保留原有 `saveState(state)` 立即写 localStorage；新增 1500ms 防抖后 `cloudSave(snapshot)` 写云端
+
+**同步策略**：
+- 读：优先云端，fallback localStorage（云端请求失败时静默报错）
+- 写：localStorage 即时 + Supabase 1.5s 防抖（避免每次击键都发请求）
 
 ---
 
@@ -23,14 +136,11 @@
 **问题2：白色背景（原因未完全确认）**
 所有含 `bg-white` 的组件理论上应被 `.dark .bg-white { background-color: var(--claude-card) !important; }` 覆盖，但用户反映仍有白色区域。
 候选问题文件：
-- `src/components/Modal.jsx` 第 35 行：modal 容器用 `bg-white`
-- `src/components/modals/OptionsModal.jsx` 第 240 行：自有 modal 容器
-- `src/components/modals/StockModal.jsx` 第 307 行：自有 modal 容器
+- `src/components/modals/OptionsModal.jsx` 第 244 行：自有 modal 容器
 - `src/components/modals/ImportModal.jsx` 第 309 行
 - `src/components/modals/StrategyModal.jsx` 第 302 行
-- `src/components/OptionsPositions.jsx` 第 28、95 行：inline modal
+- `src/components/OptionsPositions.jsx` 第 32、111 行：inline modal；第 41、54、119 行：input 元素
 - `src/components/CalendarPicker.jsx` 第 129、149 行：输入框+下拉
-- 各 modal 内的 `input` 元素用 `bg-white`（非 `.input` class）
 - **修复方案**：将所有 `bg-white` 改为 inline `style={{ background: 'var(--claude-card)' }}`，或将 input 改用 `.input` class
 
 #### 备选诊断方法（在浏览器控制台执行）：
@@ -45,7 +155,93 @@ getComputedStyle(document.documentElement).getPropertyValue('--claude-card')
 
 ---
 
-## 本次已完成的功能（2026-05-20）
+## 本次已完成的功能（2026-05-21，第十九次）
+
+### 持仓管理 + 总览横幅盈亏卡片加入期权分项
+
+**需求**：未实现盈亏、已实现盈亏、总盈亏三张卡片的数值要合并计入期权，并在卡片内底部显示「股票/期权」分行 breakdown。
+
+#### `src/components/StockPositions.jsx`
+
+**MetricCard 组件**：新增 `breakdown` prop，有内容时在主值/百分比下方渲染 `border-t` 分隔线 + 逐行显示（label + 彩色金额）。
+
+**combined 计算**（在 `cards` 数组之前）：
+- `combinedUnrealized = metrics.unrealizedPnL + optionMetrics.unrealizedPnL`
+- `combinedRealized   = metrics.realizedPnL   + optionMetrics.realizedPnL`
+- `combinedTotal      = combinedUnrealized + combinedRealized`
+- 三者百分比均以 `metrics.totalCost`（股票成本基准）为分母
+- `metrics` useMemo 新增 `totalCost` 导出
+
+**breakdown 显示条件**：
+- 未实现盈亏：`hasOpenOptions`（有开仓期权）
+- 已实现盈亏：`hasClosedOptions`（有已平仓期权）
+- 总盈亏：`hasAnyOptions`（两者之一）
+
+**NaN 守卫**：`calculateOptionMetrics` 在无法计算 BS 时可能返回 NaN，改为 `isNaN(m.unrealizedPnL) ? 0 : m.unrealizedPnL`，避免主值显示 `—`。
+
+#### `src/components/Dashboard.jsx`
+
+**MetricCard 组件**：同样新增 `breakdown` prop，渲染逻辑与 StockPositions 保持一致（`border-t` + 两行分项）。
+
+**metricCards 数组修正**：
+- `未实现盈亏`：从 `stockUnrealizedPnL`（仅股票）改为 `unrealizedPnL`（股票+期权合并），分项条件 `hasOptUnrealized`
+- `已实现盈亏`：`sub` 从内联字符串「股 · 期」改为百分比 `realizedPnL / costBasis`；分项条件 `hasOptRealized`
+- `总盈亏`：分项条件 `hasAnyOption`；股票分项 = `stockUnrealized + stockRealized`，期权分项 = `optionUnrealized + optionRealized`
+
+**NaN 守卫**：同 StockPositions，`calcPortfolioMetrics` 中加 `isNaN` 检查。
+
+---
+
+## 历史已完成功能（2026-05-21，第十八次）
+
+### 持仓表新增「今日盈亏」列
+
+**`src/components/StockPositions.jsx`**：
+- `enriched` useMemo 新增 `todayPnL` 字段：`todayChange * s.shares`，已清仓持仓为 `null`
+- 表头新增「今日盈亏」列，位于「今日涨跌」和「数量」之间
+- 对应 `<td>` 用 `getPnLClass` 绿涨红跌、`fmt.pnl` 格式化；无数据显示 `—`
+- 排序选项新增「今日盈亏」
+- 现金余额行的 `colSpan` 从 4 修正为 5（新增一列导致需要跨更多格）
+- 聚合组合下股票代码文字颜色改为 `text-blue-600`（原为默认 `text-claude-text`）
+
+### CSV 解析器重构（基于列名索引）
+
+**`src/components/modals/StockModal.jsx` → `parseCSV`**：
+- **旧方式**：按位置取列（第 0/1/2/3/4 列），中英文混搭表头无法应对列序变化
+- **新方式**：用 `findCol(aliases)` 查找每列的真实索引，支持中英文别名
+  - 日期：`date` / `日期`
+  - 操作：`action` / `操作`
+  - 股票代码：`symbol` / `ticker` / `stock` / `code` / `股票代码` / `代码`
+  - 数量：`shares` / `quantity` / `qty` / `股数` / `数量`
+  - 价格：`price` / `价格`
+  - 手续费：`commission` / `手续费` / `fee`
+- 必填列（日期/操作/数量/价格）缺失时返回 `fatalError`
+- 解析结果新增 `symbol`、`commission` 字段透传给调用方
+
+**下载模板**：列序改为「日期,股票代码,操作,股数,价格」（中文表头），与新解析器对齐
+
+---
+
+## 历史已完成功能（2026-05-20，第十七次）
+
+### 编辑交易行对齐 + 股票代码保存修复
+
+**根本原因 1（对齐）**：编辑模式下用 `<td colSpan={7}>` + flex div，不遵循表格列宽，导致内容无法与表头对齐。
+**修复**：`StockModal.jsx` 将编辑行拆成两个 `<tr>`（用 `<Fragment>` 包裹）：
+- 第一行：独立 `<td>` 对应每列，显示日期/类型/数量/价格/总额/手续费/「编辑」标签，与表头精确对齐
+- 第二行：`<td colSpan={7}>` 展开编辑表单（全宽），背景改为 `bg-blue-50/30`（原为 `bg-white`）
+
+**根本原因 2（代码不保存）**：`StockPositions.jsx` 的 `modal.edit` 是打开时的快照，`UPDATE_STOCK` dispatch 后 store 更新但 prop 仍是旧对象，导致标题不刷新。
+**修复**：`StockPositions.jsx` 改为从当前 portfolio.stocks 派生 live 对象传入 StockModal：
+```jsx
+editStock={modal.edit
+  ? (activePortfolio?.stocks ?? []).find(s => s.id === modal.edit.id) ?? modal.edit
+  : null}
+```
+
+---
+
+## 历史已完成功能（2026-05-20，第十六次与更早）
 
 ### 持仓编辑增强
 - **`src/contexts/PortfolioContext.jsx`**：新增 `UPDATE_STOCK_TRANSACTION` action，更新指定交易记录后调用 `calcPosition` 重算持仓
@@ -152,9 +348,37 @@ getComputedStyle(document.documentElement).getPropertyValue('--claude-card')
 
 ## 下一步计划
 
-1. **（优先）** 修复深色模式剩余问题（见上方"已确认问题点"）
-2. 期权年化报酬率可考虑加入「排序方式」下拉（按年化报酬率排序）
-3. **Feature 12**：Supabase 云端同步（需用户提供 URL + anon key）
+1. **（下一步）** 部署到 GitHub Pages（详见下方部署计划）
+2. **（优先）** 修复深色模式剩余问题（见上方"已确认问题点"）
+3. 期权年化报酬率可考虑加入「排序方式」下拉（按年化报酬率排序）
+
+---
+
+## GitHub Pages 部署计划（待执行）
+
+**目标**：应用托管到公网，手机/任何设备无需本地服务器即可访问，数据通过 Supabase 云端同步。
+
+**步骤：**
+
+1. **`vite.config.js` 加 `base` 配置**：
+   ```js
+   base: '/仓库名/'   // 例如 base: '/portfolio-manager/'
+   ```
+
+2. **创建 `vite.config.js` 中 router 的 hash 模式**（如使用 React Router 需配置，当前无路由可跳过）
+
+3. **创建 GitHub Actions workflow** `.github/workflows/deploy.yml`：
+   - 触发：push to main
+   - 步骤：checkout → setup node → npm ci → npm run build → 部署 dist/ 到 gh-pages 分支
+
+4. **在 GitHub repo Settings → Secrets 配置三个环境变量**：
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+   - `VITE_FINNHUB_KEY`
+
+5. **开启 GitHub Pages**：Settings → Pages → Source 选 `gh-pages` 分支
+
+**注意**：`.env.local` 不会提交到 git，需通过 repo secrets 传入 Actions。
 
 ---
 
@@ -162,6 +386,8 @@ getComputedStyle(document.documentElement).getPropertyValue('--claude-card')
 
 | 文件 | 用途 |
 |------|------|
+| `src/lib/supabase.js` | Supabase 客户端 + `cloudLoad` / `cloudSave` |
+| `.env.local` | Supabase URL + anon key（不提交 git） |
 | `src/index.css` | CSS 变量主题 + `.dark` 覆盖（**缺少 text-green/red-800/900**） |
 | `src/components/DailyPnLCalendar.jsx` | 日历（**text-green/red-900 未适配深色**） |
 | `src/components/Modal.jsx` | 通用 modal 容器（`bg-white` 待验证） |
