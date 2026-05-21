@@ -29,7 +29,7 @@ function CloseModal({ option, onClose, onConfirm }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay fade-in"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="bg-white rounded-2xl w-full max-w-sm shadow-modal border border-claude-border p-6 fade-in">
+      <div className="rounded-2xl w-full max-w-sm shadow-modal border border-claude-border p-6 fade-in" style={{ background: 'var(--claude-card)' }}>
         <h3 className="text-lg font-bold text-claude-text mb-1">平仓</h3>
         <p className="text-sm text-claude-muted mb-5">
           {option.symbol} {option.optionType === 'call' ? 'Call' : 'Put'} ${option.strike} · {option.expiration}
@@ -38,7 +38,7 @@ function CloseModal({ option, onClose, onConfirm }) {
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-claude-text mb-1.5">平仓价格（每股）</label>
-            <input className="w-full px-3 py-2.5 border border-claude-border rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+            <input className="input"
               type="number" step="0.01" min="0" value={price}
               onChange={e => setPrice(e.target.value)}
               placeholder="输入平仓价格" autoFocus />
@@ -51,7 +51,7 @@ function CloseModal({ option, onClose, onConfirm }) {
             <label className="block text-sm font-medium text-claude-text mb-1.5">
               平仓手续费（可选）
             </label>
-            <input className="w-full px-3 py-2.5 border border-claude-border rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+            <input className="input"
               type="number" step="0.01" min="0" value={commission}
               onChange={e => setCommission(e.target.value)}
               placeholder="0.00" />
@@ -108,7 +108,7 @@ function ExerciseModal({ option, onClose, onConfirm }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay fade-in"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="bg-white rounded-2xl w-full max-w-sm shadow-modal border border-claude-border p-6 fade-in">
+      <div className="rounded-2xl w-full max-w-sm shadow-modal border border-claude-border p-6 fade-in" style={{ background: 'var(--claude-card)' }}>
         <h3 className="text-lg font-bold text-claude-text mb-1">行权 / 被行权</h3>
         <p className="text-sm text-claude-muted mb-5">
           {option.symbol} {isCall ? 'Call' : 'Put'} ${strike} · {option.expiration}
@@ -116,7 +116,7 @@ function ExerciseModal({ option, onClose, onConfirm }) {
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-claude-text mb-1.5">行权时标的现价（用于计算内在价值）</label>
-            <input className="w-full px-3 py-2.5 border border-claude-border rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+            <input className="input"
               type="number" step="0.01" min="0" value={underlyingPrice}
               onChange={e => setUnderlyingPrice(e.target.value)}
               placeholder={`当前标的价格`} autoFocus />

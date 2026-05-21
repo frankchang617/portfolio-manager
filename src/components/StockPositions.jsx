@@ -6,7 +6,7 @@ import StockModal from './modals/StockModal'
 import OptionsPositions from './OptionsPositions'
 import { calculateOptionMetrics } from '../utils/blackScholes'
 
-function MetricCard({ emoji, label, value, sub, subClass }) {
+function MetricCard({ emoji, label, value, sub, subClass, breakdown }) {
   return (
     <div className="bg-white rounded-2xl border border-claude-border p-5 flex-shrink-0 min-w-[180px]"
       style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
@@ -18,6 +18,16 @@ function MetricCard({ emoji, label, value, sub, subClass }) {
         {value}
       </p>
       {sub && <p className={`text-xs mt-1 font-medium ${subClass || 'text-claude-muted'}`}>{sub}</p>}
+      {breakdown?.length > 0 && (
+        <div className="mt-3 pt-2.5 border-t border-claude-border/50 space-y-1">
+          {breakdown.map((item, i) => (
+            <div key={i} className="flex items-center justify-between gap-2">
+              <span className="text-[11px] text-claude-subtle">{item.label}</span>
+              <span className={`text-[11px] font-mono font-medium ${item.cls}`}>{item.value}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -117,7 +127,7 @@ export default function StockPositions() {
             { ...o, contracts: direction === 'buy' ? contracts : -contracts },
             q.price, r
           )
-          unrealizedPnL += m.unrealizedPnL - commission
+          unrealizedPnL += (isNaN(m.unrealizedPnL) ? 0 : m.unrealizedPnL) - commission
         }
       } else {
         realizedPnL += o.realizedPnL ?? 0
@@ -154,6 +164,7 @@ export default function StockPositions() {
       const realizedPct = isCleared && totalBuyValue > 0 ? (stockRealizedPnL / totalBuyValue) * 100 : null
       const todayChange = price != null && prevClose != null ? price - prevClose : null
       const todayChangePct = prevClose != null && prevClose !== 0 ? ((price - prevClose) / prevClose) * 100 : null
+      const todayPnL = isCleared ? null : (todayChange != null ? todayChange * s.shares : null)
       const allocation = isCleared ? 0 : (totalStockValue > 0 ? (marketValue / totalStockValue) * 100 : 0)
       const totalPnL = isCleared
         ? stockRealizedPnL
@@ -162,7 +173,7 @@ export default function StockPositions() {
         ? realizedPct
         : (totalPnL != null && costBasis !== 0 ? (totalPnL / costBasis) * 100 : null)
 
-      return { ...s, price, prevClose, marketValue, costBasis, perSharePnL, paperPnL, pnlPct, todayChange, todayChangePct, allocation, stockRealizedPnL, realizedPct, isCleared, totalPnL, totalPnLPct }
+      return { ...s, price, prevClose, marketValue, costBasis, perSharePnL, paperPnL, pnlPct, todayChange, todayChangePct, todayPnL, allocation, stockRealizedPnL, realizedPct, isCleared, totalPnL, totalPnLPct }
     })
   }, [sourceStocks, prices])
 
@@ -190,20 +201,60 @@ export default function StockPositions() {
     const totalPnLPct = totalCost > 0 ? (totalPnL / totalCost) * 100 : 0
     const todayPnL = active.reduce((s, r) => s + (r.todayChange != null ? r.todayChange * r.shares : 0), 0)
     const todayPct = totalStockValue > 0 ? (todayPnL / totalStockValue) * 100 : 0
-    return { totalStockValue, cash, unrealizedPnL, unrealizedPct, realizedPnL, totalPnL, totalPnLPct, todayPnL, todayPct }
+    return { totalStockValue, cash, totalCost, unrealizedPnL, unrealizedPct, realizedPnL, totalPnL, totalPnLPct, todayPnL, todayPct }
   }, [rows, sourceCash])
 
   if (!activePortfolio) return <div className="p-6 text-claude-muted">请先创建投资组合</div>
 
   const totalAssets = metrics.totalStockValue + metrics.cash + optionMetrics.unrealizedPnL
 
+  const hasOpenOptions  = optionMetrics.openCount > 0
+  const hasClosedOptions = optionMetrics.realizedPnL !== 0
+  const hasAnyOptions   = hasOpenOptions || hasClosedOptions
+
+  const combinedUnrealized    = metrics.unrealizedPnL + optionMetrics.unrealizedPnL
+  const combinedRealized      = metrics.realizedPnL   + optionMetrics.realizedPnL
+  const combinedTotal         = combinedUnrealized + combinedRealized
+  const combinedUnrealizedPct = metrics.totalCost > 0 ? (combinedUnrealized / metrics.totalCost) * 100 : 0
+  const combinedRealizedPct   = metrics.totalCost > 0 ? (combinedRealized   / metrics.totalCost) * 100 : 0
+  const combinedTotalPct      = metrics.totalCost > 0 ? (combinedTotal      / metrics.totalCost) * 100 : 0
+
+  const pnlCls = v => v >= 0 ? 'profit-text' : 'loss-text'
+
   const cards = [
     { emoji: '📈', label: '持仓总值', value: fmt.currency(metrics.totalStockValue) },
     { emoji: '💳', label: '现金余额', value: fmt.currency(metrics.cash) },
-    { emoji: '📊', label: '未实现盈亏', value: fmt.pnl(metrics.unrealizedPnL), sub: fmt.pctChange(metrics.unrealizedPct), subClass: metrics.unrealizedPnL >= 0 ? 'profit-text' : 'loss-text' },
-    { emoji: '✅', label: '已实现盈亏', value: fmt.pnl(metrics.realizedPnL), sub: metrics.totalStockValue > 0 ? fmt.pctChange((metrics.realizedPnL / metrics.totalStockValue) * 100) : undefined, subClass: metrics.realizedPnL >= 0 ? 'profit-text' : 'loss-text' },
-    { emoji: '🎯', label: '总盈亏', value: fmt.pnl(metrics.totalPnL), sub: fmt.pctChange(metrics.totalPnLPct), subClass: metrics.totalPnL >= 0 ? 'profit-text' : 'loss-text' },
-    { emoji: '☀️', label: '今日盈亏', value: fmt.pnl(metrics.todayPnL), sub: fmt.pctChange(metrics.todayPct), subClass: metrics.todayPnL >= 0 ? 'profit-text' : 'loss-text' },
+    {
+      emoji: '📊', label: '未实现盈亏',
+      value: fmt.pnl(combinedUnrealized),
+      sub: fmt.pctChange(combinedUnrealizedPct),
+      subClass: pnlCls(combinedUnrealized),
+      breakdown: hasOpenOptions ? [
+        { label: '股票', value: fmt.pnl(metrics.unrealizedPnL),        cls: pnlCls(metrics.unrealizedPnL) },
+        { label: '期权', value: fmt.pnl(optionMetrics.unrealizedPnL),  cls: pnlCls(optionMetrics.unrealizedPnL) },
+      ] : null,
+    },
+    {
+      emoji: '✅', label: '已实现盈亏',
+      value: fmt.pnl(combinedRealized),
+      sub: fmt.pctChange(combinedRealizedPct),
+      subClass: pnlCls(combinedRealized),
+      breakdown: hasClosedOptions ? [
+        { label: '股票', value: fmt.pnl(metrics.realizedPnL),         cls: pnlCls(metrics.realizedPnL) },
+        { label: '期权', value: fmt.pnl(optionMetrics.realizedPnL),   cls: pnlCls(optionMetrics.realizedPnL) },
+      ] : null,
+    },
+    {
+      emoji: '🎯', label: '总盈亏',
+      value: fmt.pnl(combinedTotal),
+      sub: fmt.pctChange(combinedTotalPct),
+      subClass: pnlCls(combinedTotal),
+      breakdown: hasAnyOptions ? [
+        { label: '股票', value: fmt.pnl(metrics.totalPnL),                                         cls: pnlCls(metrics.totalPnL) },
+        { label: '期权', value: fmt.pnl(optionMetrics.unrealizedPnL + optionMetrics.realizedPnL),  cls: pnlCls(optionMetrics.unrealizedPnL + optionMetrics.realizedPnL) },
+      ] : null,
+    },
+    { emoji: '☀️', label: '今日盈亏', value: fmt.pnl(metrics.todayPnL), sub: fmt.pctChange(metrics.todayPct), subClass: pnlCls(metrics.todayPnL) },
   ]
 
   return (
@@ -278,6 +329,7 @@ export default function StockPositions() {
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs text-claude-muted font-medium mr-1">排序方式：</span>
               {[
+                { field: 'todayPnL',    label: '今日盈亏' },
                 { field: 'pnlPct',      label: '账面盈亏%' },
                 { field: 'totalPnL',    label: '总盈亏' },
                 { field: 'totalPnLPct', label: '总盈亏%' },
@@ -324,7 +376,7 @@ export default function StockPositions() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-claude-border bg-gray-50/50">
-                  {['代码','价格','今日涨跌','数量','平均成本','持仓价值','每股盈亏','账面盈亏','已实现盈亏','账面盈亏%','总盈亏','总盈亏%','占比 %', ...(!isAggregate ? ['操作'] : [])].map(h => (
+                  {['代码','价格','今日涨跌','今日盈亏','数量','平均成本','持仓价值','每股盈亏','账面盈亏','已实现盈亏','账面盈亏%','总盈亏','总盈亏%','占比 %', ...(!isAggregate ? ['操作'] : [])].map(h => (
                     <th key={h} className={`text-xs font-semibold text-claude-subtle uppercase tracking-wide py-3 px-4 whitespace-nowrap ${h === '代码' ? 'text-left' : 'text-right'}`}>
                       {h}
                     </th>
@@ -338,7 +390,7 @@ export default function StockPositions() {
                     <td className="py-3.5 px-4">
                       <div className="flex items-center gap-1.5">
                         {isAggregate ? (
-                          <span className="font-bold text-sm text-claude-text">{s.symbol}</span>
+                          <span className="font-bold text-sm text-blue-600">{s.symbol}</span>
                         ) : (
                           <button
                             onClick={() => setModal({ open: true, edit: s })}
@@ -373,6 +425,10 @@ export default function StockPositions() {
                           </div>
                         </div>
                       ) : <span className="text-claude-subtle text-xs">—</span>}
+                    </td>
+                    {/* 今日盈亏 */}
+                    <td className={`py-3.5 px-4 text-right text-sm font-mono font-semibold ${getPnLClass(s.todayPnL)}`}>
+                      {s.todayPnL != null ? fmt.pnl(s.todayPnL) : <span className="text-claude-subtle text-xs">—</span>}
                     </td>
                     {/* 数量 */}
                     <td className="py-3.5 px-4 text-right text-sm font-mono">{s.shares.toFixed(2)}</td>
@@ -434,7 +490,7 @@ export default function StockPositions() {
                   <td className="py-3.5 px-4">
                     <span className="text-sm font-medium text-claude-muted">现金余额</span>
                   </td>
-                  <td colSpan={4} className="py-3.5 px-4 text-right text-claude-subtle text-sm">—</td>
+                  <td colSpan={5} className="py-3.5 px-4 text-right text-claude-subtle text-sm">—</td>
                   <td className="py-3.5 px-4 text-right text-sm font-mono font-semibold text-claude-text">
                     {fmt.currency(sourceCash)}
                   </td>
@@ -464,7 +520,9 @@ export default function StockPositions() {
         <StockModal
           isOpen={modal.open}
           onClose={() => setModal({ open: false, edit: null })}
-          editStock={modal.edit}
+          editStock={modal.edit
+            ? (activePortfolio?.stocks ?? []).find(s => s.id === modal.edit.id) ?? modal.edit
+            : null}
         />
       )}
 

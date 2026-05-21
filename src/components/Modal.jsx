@@ -32,8 +32,8 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' })
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
       <div
-        className={`bg-white rounded-3xl w-full ${sizeClass} shadow-modal border border-claude-border fade-in`}
-        style={{ maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}
+        className={`rounded-3xl w-full ${sizeClass} shadow-modal border border-claude-border fade-in`}
+        style={{ maxHeight: '90vh', display: 'flex', flexDirection: 'column', background: 'var(--claude-card)' }}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-claude-border flex-shrink-0">

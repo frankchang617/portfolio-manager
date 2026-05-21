@@ -124,8 +124,8 @@ export default function Header({ onMenuClick }) {
               </button>
 
               {dropdownOpen && (
-                <div className="absolute left-0 top-full mt-2 w-72 bg-white rounded-2xl z-50 py-2 fade-in"
-                  style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.14)', border: '1px solid var(--claude-border)' }}>
+                <div className="absolute left-0 top-full mt-2 w-72 rounded-2xl z-50 py-2 fade-in"
+                  style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.14)', border: '1px solid var(--claude-border)', background: 'var(--claude-card)' }}>
                   <p className="text-[10px] font-semibold text-claude-subtle uppercase tracking-widest px-4 py-2">
                     我的投资组合
                   </p>

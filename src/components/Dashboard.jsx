@@ -69,7 +69,7 @@ function calcPortfolioMetrics(portfolio, prices, riskFreeRate = 0.05) {
       { ...o, contracts: direction === 'buy' ? contracts : -contracts },
       underlyingPrice, riskFreeRate
     )
-    return sum + m.unrealizedPnL - (o.commission ?? 0)
+    return sum + (isNaN(m.unrealizedPnL) ? 0 : m.unrealizedPnL) - (o.commission ?? 0)
   }, 0)
 
   const unrealizedPnL = stockUnrealizedPnL + optionUnrealizedPnL
@@ -97,9 +97,9 @@ function calcPortfolioMetrics(portfolio, prices, riskFreeRate = 0.05) {
 }
 
 // ── Metric card ──────────────────────────────────────────────────────────────
-function MetricCard({ emoji, label, value, sub, pnl, highlight }) {
+function MetricCard({ emoji, label, value, sub, pnl, highlight, breakdown }) {
   const valueClass = pnl > 0 ? 'text-profit' : pnl < 0 ? 'text-loss' : 'text-claude-text'
-  const subClass = pnl > 0 ? 'text-profit' : pnl < 0 ? 'text-loss' : 'text-claude-muted'
+  const subClass   = pnl > 0 ? 'text-profit' : pnl < 0 ? 'text-loss' : 'text-claude-muted'
   return (
     <div
       className={`rounded-2xl p-5 border flex-shrink-0 ${highlight ? 'bg-gray-100 border-gray-200' : 'bg-white border-claude-border'}`}
@@ -111,6 +111,16 @@ function MetricCard({ emoji, label, value, sub, pnl, highlight }) {
       </div>
       <p className={`text-xl font-bold leading-tight ${valueClass}`}>{value}</p>
       {sub && <p className={`text-xs mt-1 font-medium ${subClass}`}>{sub}</p>}
+      {breakdown?.length > 0 && (
+        <div className="mt-3 pt-2.5 border-t border-claude-border/50 space-y-1">
+          {breakdown.map((item, i) => (
+            <div key={i} className="flex items-center justify-between gap-2">
+              <span className="text-[11px] text-claude-subtle">{item.label}</span>
+              <span className={`text-[11px] font-mono font-medium ${item.cls}`}>{item.value}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -326,14 +336,47 @@ export default function Dashboard({ setActiveTab }) {
     }))
   ), [allMetrics])
 
+  const pnlCls = v => v > 0 ? 'text-profit' : v < 0 ? 'text-loss' : 'text-claude-muted'
+  const hasOptUnrealized = totals.optionUnrealizedPnL !== 0
+  const hasOptRealized   = totals.optionRealizedPnL   !== 0
+  const hasAnyOption     = hasOptUnrealized || hasOptRealized
+  const realizedPct      = totals.costBasis > 0 ? (totals.realizedPnL / totals.costBasis) * 100 : 0
+
   const metricCards = [
-    { emoji: '🌐', label: '跨组合总资产',   value: fmt.large(totals.totalValue), highlight: true },
-    { emoji: '📈', label: '股票持仓总值',   value: fmt.large(totals.totalStockValue) },
-    { emoji: '💵', label: '总现金',         value: fmt.currency(totals.cash) },
-    { emoji: '📊', label: '未实现盈亏',     value: fmt.pnl(totals.stockUnrealizedPnL), sub: fmt.pctChange(totals.unrealizedPct), pnl: totals.stockUnrealizedPnL },
-    { emoji: '✅', label: '已实现盈亏',     value: fmt.pnl(totals.realizedPnL), sub: `股 ${fmt.pnl(totals.stockRealizedPnL)} · 期 ${fmt.pnl(totals.optionRealizedPnL)}`, pnl: totals.realizedPnL },
-    { emoji: '🎯', label: '总盈亏',         value: fmt.pnl(totals.totalPnL), sub: fmt.pctChange(totals.totalPnLPct), pnl: totals.totalPnL },
-    { emoji: '☀️', label: '今日盈亏',      value: fmt.pnl(totals.todayPnL), sub: fmt.pctChange(totals.todayPct), pnl: totals.todayPnL },
+    { emoji: '🌐', label: '跨组合总资产', value: fmt.large(totals.totalValue), highlight: true },
+    { emoji: '📈', label: '股票持仓总值', value: fmt.large(totals.totalStockValue) },
+    { emoji: '💵', label: '总现金',       value: fmt.currency(totals.cash) },
+    {
+      emoji: '📊', label: '未实现盈亏',
+      value: fmt.pnl(totals.unrealizedPnL),
+      sub: fmt.pctChange(totals.unrealizedPct),
+      pnl: totals.unrealizedPnL,
+      breakdown: hasOptUnrealized ? [
+        { label: '股票', value: fmt.pnl(totals.stockUnrealizedPnL), cls: pnlCls(totals.stockUnrealizedPnL) },
+        { label: '期权', value: fmt.pnl(totals.optionUnrealizedPnL), cls: pnlCls(totals.optionUnrealizedPnL) },
+      ] : null,
+    },
+    {
+      emoji: '✅', label: '已实现盈亏',
+      value: fmt.pnl(totals.realizedPnL),
+      sub: fmt.pctChange(realizedPct),
+      pnl: totals.realizedPnL,
+      breakdown: hasOptRealized ? [
+        { label: '股票', value: fmt.pnl(totals.stockRealizedPnL), cls: pnlCls(totals.stockRealizedPnL) },
+        { label: '期权', value: fmt.pnl(totals.optionRealizedPnL), cls: pnlCls(totals.optionRealizedPnL) },
+      ] : null,
+    },
+    {
+      emoji: '🎯', label: '总盈亏',
+      value: fmt.pnl(totals.totalPnL),
+      sub: fmt.pctChange(totals.totalPnLPct),
+      pnl: totals.totalPnL,
+      breakdown: hasAnyOption ? [
+        { label: '股票', value: fmt.pnl(totals.stockUnrealizedPnL + totals.stockRealizedPnL), cls: pnlCls(totals.stockUnrealizedPnL + totals.stockRealizedPnL) },
+        { label: '期权', value: fmt.pnl(totals.optionUnrealizedPnL + totals.optionRealizedPnL), cls: pnlCls(totals.optionUnrealizedPnL + totals.optionRealizedPnL) },
+      ] : null,
+    },
+    { emoji: '☀️', label: '今日盈亏', value: fmt.pnl(totals.todayPnL), sub: fmt.pctChange(totals.todayPct), pnl: totals.todayPnL },
   ]
 
   return (

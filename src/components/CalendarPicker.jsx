@@ -126,8 +126,9 @@ export default function CalendarPicker({ value, onChange, placeholder = '选择�
   return (
     <div ref={ref} className="relative">
       {/* Text input + calendar icon */}
-      <div className={`flex items-center w-full px-3 py-2.5 border rounded-xl bg-white transition-all
-        ${open ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-claude-border hover:border-gray-400'}`}>
+      <div className={`flex items-center w-full px-3 py-2.5 border rounded-xl transition-all
+        ${open ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-claude-border hover:border-gray-400'}`}
+        style={{ background: 'var(--claude-input-bg)' }}>
         <input
           ref={inputRef}
           type="text"
@@ -146,7 +147,8 @@ export default function CalendarPicker({ value, onChange, placeholder = '选择�
 
       {/* Calendar panel */}
       {open && (
-        <div className="absolute z-[100] top-full mt-2 bg-white rounded-2xl border border-claude-border w-72 p-4 fade-in"
+        <div className="absolute z-[100] top-full mt-2 rounded-2xl border border-claude-border w-72 p-4 fade-in"
+          style={{ background: 'var(--claude-card)' }}
           style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.08)' }}>
 
           {/* Nav header */}

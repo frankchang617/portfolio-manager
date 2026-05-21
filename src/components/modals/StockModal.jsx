@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Fragment } from 'react'
 import { X, TrendingUp, TrendingDown, Upload, Trash2, AlertTriangle, ChevronUp, ChevronDown, Download, Pencil, Check } from 'lucide-react'
 import { usePortfolio } from '../../contexts/PortfolioContext'
 import { fmt, getPnLClass } from '../../utils/formatters'
@@ -41,7 +41,7 @@ function SpinnerInput({ value, onChange, prefix = '', step = 1, min = 0, placeho
 
 // ── CSV parser ───────────────────────────────────────────────────────────────
 // Returns { rows, rowErrors, fatalError }
-// rows: valid parsed rows
+// rows: valid parsed rows — each row includes { date, action, shares, price, symbol, commission }
 // rowErrors: [{ line, raw, reasons[] }] for invalid rows
 // fatalError: string if the file itself is unparseable
 function parseCSV(text) {
@@ -49,9 +49,19 @@ function parseCSV(text) {
   const lines = allLines.filter(l => l.trim())
   if (lines.length < 2) return { rows: [], rowErrors: [], fatalError: '文件为空或缺少数据行' }
 
-  const headerCols = lines[0].toLowerCase().split(',').map(c => c.trim().replace(/^"|"$/g, ''))
-  const hasSymbolCol = headerCols.some(h => ['symbol', 'ticker', 'stock', 'code'].includes(h))
-  const minCols = hasSymbolCol ? 5 : 4
+  const rawHeaders = lines[0].split(',').map(c => c.trim().replace(/^"|"$/g, '').toLowerCase())
+  const findCol = aliases => rawHeaders.findIndex(h => aliases.includes(h))
+
+  const colDate       = findCol(['date', '日期'])
+  const colAction     = findCol(['action', '操作'])
+  const colSymbol     = findCol(['symbol', 'ticker', 'stock', 'code', '股票代码', '代码'])
+  const colShares     = findCol(['shares', 'quantity', 'qty', '股数', '数量'])
+  const colPrice      = findCol(['price', '价格'])
+  const colCommission = findCol(['commission', '手续费', 'fee'])
+
+  if (colDate < 0 || colAction < 0 || colShares < 0 || colPrice < 0) {
+    return { rows: [], rowErrors: [], fatalError: '表头格式无法识别，请下载模板参考' }
+  }
 
   const rows = []
   const rowErrors = []
@@ -59,54 +69,39 @@ function parseCSV(text) {
   for (let i = 1; i < lines.length; i++) {
     const raw = lines[i]
     const cols = raw.split(',').map(c => c.trim().replace(/^"|"$/g, ''))
-    const lineNum = i + 1  // 1-based, header = line 1
+    const lineNum = i + 1
     const reasons = []
 
-    // Column count check
-    if (cols.length < minCols) {
-      rowErrors.push({ line: lineNum, raw, reasons: [`列数不足（期望 ${minCols} 列，实际 ${cols.length} 列）`] })
-      continue
-    }
+    const date       = cols[colDate]    ?? ''
+    const action     = cols[colAction]  ?? ''
+    const symbol     = colSymbol >= 0   ? (cols[colSymbol] ?? '').toUpperCase().trim() : ''
+    const sharesRaw  = cols[colShares]  ?? ''
+    const priceRaw   = cols[colPrice]   ?? ''
+    const commission = colCommission >= 0 ? (parseFloat(cols[colCommission]) || 0) : 0
 
-    let date, action, sharesRaw, priceRaw
-    if (hasSymbolCol) {
-      ;[date, action, , sharesRaw, priceRaw] = cols
-    } else {
-      ;[date, action, sharesRaw, priceRaw] = cols
-    }
+    if (!date) reasons.push('日期为空')
+    else if (!/^\d{4}[-/]\d{2}[-/]\d{2}$/.test(date)) reasons.push(`日期格式错误「${date}」，应为 YYYY-MM-DD`)
+    else if (isNaN(new Date(date).getTime())) reasons.push(`日期无效「${date}」`)
 
-    // Date validation
-    if (!date) {
-      reasons.push('日期为空')
-    } else if (!/^\d{4}[-/]\d{2}[-/]\d{2}$/.test(date)) {
-      reasons.push(`日期格式错误「${date}」，应为 YYYY-MM-DD`)
-    } else {
-      const d = new Date(date)
-      if (isNaN(d.getTime())) reasons.push(`日期无效「${date}」`)
-    }
-
-    // Action validation
-    const actLower = (action || '').toLowerCase()
-    const isBuy = actLower.includes('buy') || action.includes('买')
+    const actLower = action.toLowerCase()
+    const isBuy  = actLower.includes('buy')  || action.includes('买')
     const isSell = actLower.includes('sell') || action.includes('卖')
     if (!isBuy && !isSell) reasons.push(`操作类型无法识别「${action}」，应为 buy 或 sell`)
 
-    // Shares validation
     const shares = parseFloat(sharesRaw)
     if (!sharesRaw) reasons.push('数量为空')
     else if (isNaN(shares)) reasons.push(`数量不是数字「${sharesRaw}」`)
-    else if (shares <= 0) reasons.push(`数量必须大于 0（当前：${shares}）`)
+    else if (shares <= 0) reasons.push('数量必须大于 0')
 
-    // Price validation
     const price = parseFloat(priceRaw)
     if (!priceRaw) reasons.push('价格为空')
     else if (isNaN(price)) reasons.push(`价格不是数字「${priceRaw}」`)
-    else if (price <= 0) reasons.push(`价格必须大于 0（当前：${price}）`)
+    else if (price <= 0) reasons.push('价格必须大于 0')
 
     if (reasons.length > 0) {
       rowErrors.push({ line: lineNum, raw, reasons })
     } else {
-      rows.push({ date, action: isBuy ? 'buy' : 'sell', shares, price })
+      rows.push({ date, action: isBuy ? 'buy' : 'sell', shares, price, symbol, commission })
     }
   }
 
@@ -375,10 +370,10 @@ export default function StockModal({ isOpen, onClose, editStock = null }) {
   const downloadTemplate = () => {
     const sym = (editStock?.symbol || newSymbol.trim().toUpperCase() || 'AAPL')
     const rows = [
-      'date,action,symbol,shares,price',
-      `2024-01-15,buy,${sym},100,185.50`,
-      `2024-03-20,buy,${sym},50,171.25`,
-      `2024-06-10,sell,${sym},30,195.80`,
+      '日期,股票代码,操作,股数,价格',
+      `2024-01-15,${sym},buy,100,185.50`,
+      `2024-03-20,${sym},buy,50,171.25`,
+      `2024-06-10,${sym},sell,30,195.80`,
     ]
     const blob = new Blob(['﻿' + rows.join('\n')], { type: 'text/csv;charset=utf-8;' })
     const a = document.createElement('a')
@@ -394,8 +389,8 @@ export default function StockModal({ isOpen, onClose, editStock = null }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay fade-in"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="bg-white rounded-3xl w-full max-w-2xl shadow-modal border border-claude-border fade-in"
-        style={{ maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+      <div className="rounded-3xl w-full max-w-2xl shadow-modal border border-claude-border fade-in"
+        style={{ maxHeight: '90vh', display: 'flex', flexDirection: 'column', background: 'var(--claude-card)' }}>
 
         {/* ── Header ── */}
         <div className="flex items-start justify-between px-6 pt-6 pb-4 flex-shrink-0">
@@ -612,22 +607,35 @@ export default function StockModal({ isOpen, onClose, editStock = null }) {
                           const previewPrice = parseFloat(editForm.price)
                           const previewTotal = previewShares > 0 && previewPrice > 0 ? previewShares * previewPrice : null
                           return (
-                            <tr key={t.id}>
-                              <td colSpan={7} className="py-0 px-0">
-                                {/* 蓝色摘要条 */}
-                                <div className="bg-blue-50 border-l-4 border-blue-400 px-4 py-2.5 flex items-center gap-4 text-sm">
-                                  <span className="text-blue-600 font-semibold text-xs">编辑中</span>
-                                  <span className="text-claude-muted font-mono text-xs">
-                                    {new Date(t.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                                  </span>
+                            <Fragment key={t.id}>
+                              {/* 摘要行：与表头列对齐 */}
+                              <tr className="bg-blue-50/70 border-b border-blue-200/40">
+                                <td className="py-2.5 pr-4 text-xs font-mono text-blue-700">
+                                  {new Date(t.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                </td>
+                                <td className="py-2.5 pr-4">
                                   <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium
                                     ${t.action === 'buy' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
                                     {t.action === 'buy' ? '↗ 买入' : '↘ 卖出'}
                                   </span>
-                                  <span className="font-mono text-xs text-claude-muted">{t.shares.toFixed(2)} 股 @ {fmt.currency(t.price)}</span>
-                                </div>
+                                </td>
+                                <td className="py-2.5 pr-4 text-xs font-mono text-right text-claude-text">{t.shares.toFixed(2)}</td>
+                                <td className="py-2.5 pr-4 text-xs font-mono text-right text-claude-text">{fmt.currency(t.price)}</td>
+                                <td className="py-2.5 pr-4 text-xs font-mono text-right text-claude-text">
+                                  {fmt.currency(t.shares * t.price)}
+                                </td>
+                                <td className="py-2.5 text-xs font-mono text-right text-claude-muted">
+                                  {t.commission > 0 ? fmt.currency(t.commission) : '—'}
+                                </td>
+                                <td className="py-2.5 w-8 text-center">
+                                  <span className="text-[10px] font-bold text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded">编辑</span>
+                                </td>
+                              </tr>
+                              {/* 展开表单行：全宽 */}
+                              <tr>
+                              <td colSpan={7} className="py-0 px-0">
                                 {/* 展开的编辑表单 */}
-                                <div className="bg-white border-l-4 border-blue-400 border-t border-claude-border/50 px-4 py-4">
+                                <div className="bg-blue-50/30 border-l-4 border-blue-400 border-b border-claude-border/30 px-4 py-4">
                                   <div className="grid grid-cols-3 gap-4 mb-4">
                                     <div>
                                       <label className="label">交易类型</label>
@@ -681,7 +689,8 @@ export default function StockModal({ isOpen, onClose, editStock = null }) {
                                   </div>
                                 </div>
                               </td>
-                            </tr>
+                              </tr>
+                            </Fragment>
                           )
                         }
                         return (

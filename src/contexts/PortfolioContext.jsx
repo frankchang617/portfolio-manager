@@ -1,5 +1,6 @@
 import { createContext, useContext, useReducer, useEffect, useCallback, useRef } from 'react'
 import { fetchQuotes, getPortfolioSymbols } from '../utils/api'
+import { cloudLoad, cloudSave } from '../lib/supabase'
 
 const STORAGE_KEY = 'portfolio_manager_v3'
 
@@ -523,6 +524,39 @@ function reducer(state, action) {
       })}
     }
 
+    case 'HYDRATE': {
+      const saved = action.payload
+      if (!saved?.portfolios?.length) return state
+      const portfolios = (saved.portfolios ?? []).map(p => {
+        if (p.name === '总投资组合') return { ...p, isAggregate: true, stocks: [], cash: 0 }
+        const options = (p.options ?? []).map(o => {
+          if (o.status === 'closed' && !o.commissionApplied) {
+            return { ...o, realizedPnL: (o.realizedPnL ?? 0) - (o.commission ?? 0), commissionApplied: true }
+          }
+          return o
+        })
+        const stocks = (p.stocks ?? []).map(stock => {
+          const txns = stock.transactions ?? []
+          if (!txns.some(t => t.action === 'sell' && t.realizedPnL === undefined)) return stock
+          const sorted = [...txns].sort((a, b) => new Date(a.date) - new Date(b.date))
+          const migrated = computeTxnPnL(stock.initialShares ?? 0, stock.initialAvgCost ?? 0, sorted)
+          const pos = calcPosition(stock.initialShares ?? 0, stock.initialAvgCost ?? 0, migrated)
+          return { ...stock, transactions: migrated, shares: pos.shares, avgCost: pos.avgCost, stockRealizedPnL: pos.realizedPnL }
+        })
+        return { ...p, options, stocks, strategies: p.strategies ?? [] }
+      })
+      return {
+        ...state,
+        ...saved,
+        portfolios,
+        dailySnapshots: saved.dailySnapshots ?? [],
+        portfolioSnapshots: saved.portfolioSnapshots ?? {},
+        prices: {},
+        isLoading: false,
+        error: null,
+      }
+    }
+
     default:
       return state
   }
@@ -533,9 +567,35 @@ const PortfolioContext = createContext(null)
 export function PortfolioProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, undefined, loadInitialState)
   const refreshTimerRef = useRef(null)
+  const syncTimerRef = useRef(null)
 
+  // 首次挂载：从云端加载数据；若云端为空则将本地数据上传
+  useEffect(() => {
+    cloudLoad().then(cloudData => {
+      if (cloudData?.portfolios?.length) {
+        dispatch({ type: 'HYDRATE', payload: cloudData })
+      } else {
+        const localData = loadState()
+        if (localData?.portfolios?.length) {
+          cloudSave(localData).catch(console.error)
+        }
+      }
+    }).catch(console.error)
+  }, [])
+
+  // 状态变化：立即存 localStorage，延迟 1.5s 存云端
   useEffect(() => {
     saveState(state)
+    clearTimeout(syncTimerRef.current)
+    syncTimerRef.current = setTimeout(() => {
+      cloudSave({
+        portfolios: state.portfolios,
+        activePortfolioId: state.activePortfolioId,
+        settings: state.settings,
+        dailySnapshots: state.dailySnapshots,
+        portfolioSnapshots: state.portfolioSnapshots,
+      }).catch(console.error)
+    }, 1500)
   }, [state.portfolios, state.activePortfolioId, state.settings, state.dailySnapshots, state.portfolioSnapshots])
 
   const activePortfolio = state.portfolios.find(p => p.id === state.activePortfolioId) || state.portfolios[0]

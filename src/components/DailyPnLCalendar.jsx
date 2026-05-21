@@ -327,7 +327,7 @@ export default function DailyPnLCalendar() {
                     : dow === 6
                     ? 'text-blue-500'
                     : data && pnl !== null
-                    ? pnl > 0 ? 'text-green-900' : 'text-red-900'
+                    ? pnl > 0 ? 'profit-text' : 'loss-text'
                     : 'text-claude-text'
                 }`}>
                   {day}
@@ -335,7 +335,7 @@ export default function DailyPnLCalendar() {
 
                 {pnl !== null && (
                   <span className={`text-[11px] font-bold leading-tight ${
-                    pnl > 0 ? 'text-green-800' : 'text-red-800'
+                    pnl > 0 ? 'profit-text' : 'loss-text'
                   }`}>
                     {compactPnL(pnl)}
                   </span>

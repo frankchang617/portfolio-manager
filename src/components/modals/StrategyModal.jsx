@@ -299,7 +299,7 @@ export default function StrategyModal({ onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
-      <div className="bg-white rounded-2xl shadow-modal w-full max-w-2xl mx-4 max-h-[90vh] flex flex-col">
+      <div className="rounded-2xl shadow-modal w-full max-w-2xl mx-4 max-h-[90vh] flex flex-col" style={{ background: 'var(--claude-card)' }}>
 
         {/* Header */}
         <div className="flex items-center gap-3 px-6 py-4 border-b border-claude-border flex-shrink-0">

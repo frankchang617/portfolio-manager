@@ -241,8 +241,8 @@ export default function OptionsModal({ isOpen, onClose, editOption = null }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay fade-in"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="bg-white rounded-3xl w-full max-w-xl shadow-modal border border-claude-border fade-in"
-        style={{ maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}>
+      <div className="rounded-3xl w-full max-w-xl shadow-modal border border-claude-border fade-in"
+        style={{ maxHeight: '92vh', display: 'flex', flexDirection: 'column', background: 'var(--claude-card)' }}>
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-claude-border flex-shrink-0">
