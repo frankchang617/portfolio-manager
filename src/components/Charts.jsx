@@ -1,8 +1,8 @@
 import { useMemo } from 'react'
 import { useChartColors } from '../hooks/useDarkMode'
 import {
-  PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, ReferenceLine,
+  PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, ReferenceLine, Legend,
 } from 'recharts'
 import { usePortfolio } from '../contexts/PortfolioContext'
 import { calculateOptionMetrics } from '../utils/blackScholes'
@@ -66,9 +66,14 @@ export default function Charts() {
     }
     const data = Object.entries(bySymbol).map(([name, value]) => ({ name, value }))
     const total = data.reduce((sum, d) => sum + d.value, 0)
-    return data
+    const sorted = data
       .map(d => ({ ...d, pct: total > 0 ? (d.value / total) * 100 : 0 }))
       .sort((a, b) => b.value - a.value)
+    const n = sorted.length
+    return sorted.map((d, i) => ({
+      ...d,
+      color: n <= COLORS.length ? COLORS[i] : `hsl(${Math.round(i * 360 / n)}, 60%, 52%)`,
+    }))
   }, [sourceStocks, prices])
 
   const pnlData = useMemo(() => {
@@ -154,7 +159,7 @@ export default function Charts() {
         <div className="card p-6">
           <h3 className="text-sm font-semibold text-claude-muted mb-6 uppercase tracking-wide">持仓分配</h3>
           {allocationData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={280}>
+            <ResponsiveContainer width="100%" height={260}>
               <PieChart>
                 <Pie
                   data={allocationData}
@@ -165,18 +170,11 @@ export default function Charts() {
                   paddingAngle={3}
                   dataKey="value"
                 >
-                  {allocationData.map((_, i) => (
-                    <Cell key={i} fill={COLORS[i % COLORS.length]} strokeWidth={0} />
+                  {allocationData.map((d, i) => (
+                    <Cell key={i} fill={d.color} strokeWidth={0} />
                   ))}
                 </Pie>
                 <Tooltip content={<CustomTooltip />} />
-                <Legend
-                  formatter={(value, entry) => (
-                    <span className="text-sm text-claude-text">
-                      {value} <span className="text-claude-muted">({entry.payload.pct?.toFixed(1)}%)</span>
-                    </span>
-                  )}
-                />
               </PieChart>
             </ResponsiveContainer>
           ) : (
@@ -190,12 +188,12 @@ export default function Charts() {
         <div className="card p-6">
           <h3 className="text-sm font-semibold text-claude-muted mb-4 uppercase tracking-wide">持仓明细</h3>
           {allocationData.length > 0 ? (
-            <div className="space-y-3">
-              {allocationData.map((d, i) => (
+            <div className="space-y-3 overflow-y-auto max-h-[260px] pr-1">
+              {allocationData.map((d) => (
                 <div key={d.name} className="flex items-center gap-3">
                   <div
                     className="w-3 h-3 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: COLORS[i % COLORS.length] }}
+                    style={{ backgroundColor: d.color }}
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
@@ -206,7 +204,7 @@ export default function Charts() {
                       <div className="flex-1 bg-claude-bg rounded-full h-1.5">
                         <div
                           className="h-1.5 rounded-full transition-all"
-                          style={{ width: `${d.pct}%`, backgroundColor: COLORS[i % COLORS.length] }}
+                          style={{ width: `${d.pct}%`, backgroundColor: d.color }}
                         />
                       </div>
                       <span className="text-xs text-claude-muted w-10 text-right">{d.pct.toFixed(1)}%</span>

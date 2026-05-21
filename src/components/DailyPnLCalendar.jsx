@@ -53,7 +53,7 @@ export default function DailyPnLCalendar() {
   const dailyData = useMemo(() => {
     const map = {}
 
-    // todayPnL 仅在聚合视图下可用（全局快照不拆分到子组合）
+    // 历史 todayPnL 来自全局快照（仅聚合视图，快照无法拆分到子组合）
     if (isAggregate) {
       for (const s of (state.dailySnapshots ?? [])) {
         if (!map[s.date]) map[s.date] = { realized: 0, todayPnL: 0 }
@@ -78,8 +78,25 @@ export default function DailyPnLCalendar() {
       }
     }
 
+    // 今日格：从实时价格计算未实现盈亏（当前价格 - 持仓成本）
+    const todayKey = new Date().toISOString().split('T')[0]
+    let liveTodayPnL = 0
+    for (const p of portfoliosToProcess) {
+      for (const s of (p.stocks ?? [])) {
+        if (s.shares <= 0) continue
+        const q = state.prices[s.symbol.toUpperCase()]
+        if (q?.price != null) {
+          liveTodayPnL += (q.price - s.avgCost) * s.shares
+        }
+      }
+    }
+    if (liveTodayPnL !== 0) {
+      if (!map[todayKey]) map[todayKey] = { realized: 0, todayPnL: 0 }
+      map[todayKey].todayPnL = liveTodayPnL
+    }
+
     return map
-  }, [portfoliosToProcess, isAggregate, state.dailySnapshots])
+  }, [portfoliosToProcess, isAggregate, state.dailySnapshots, state.prices])
 
   const calendarDays = useMemo(() => {
     const firstDay = new Date(year, month, 1)
@@ -369,7 +386,7 @@ export default function DailyPnLCalendar() {
               )}
               {hoveredData.todayPnL !== 0 && (
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-claude-muted">当日市值变动</span>
+                  <span className="text-xs text-claude-muted">未实现盈亏</span>
                   <span className={`text-sm font-bold font-mono ${hoveredData.todayPnL >= 0 ? 'profit-text' : 'loss-text'}`}>
                     {fmt.pnl(hoveredData.todayPnL)}
                   </span>
