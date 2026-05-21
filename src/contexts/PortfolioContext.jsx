@@ -562,30 +562,45 @@ function reducer(state, action) {
   }
 }
 
+// "有效数据"：至少有一个非聚合子组合且包含股票或期权
+function hasRealData(data) {
+  if (!data?.portfolios?.length) return false
+  return data.portfolios.some(p => !p.isAggregate && ((p.stocks?.length ?? 0) > 0 || (p.options?.length ?? 0) > 0))
+}
+
 const PortfolioContext = createContext(null)
 
 export function PortfolioProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, undefined, loadInitialState)
   const refreshTimerRef = useRef(null)
   const syncTimerRef = useRef(null)
+  // 云端加载完成前不写云端，避免初始空状态覆盖云端真实数据
+  const cloudLoadDoneRef = useRef(false)
 
-  // 首次挂载：从云端加载数据；若云端为空则将本地数据上传
+  // 首次挂载：从云端加载数据；云端有真实数据则 HYDRATE，否则将本地真实数据上传
   useEffect(() => {
     cloudLoad().then(cloudData => {
-      if (cloudData?.portfolios?.length) {
+      if (hasRealData(cloudData)) {
         dispatch({ type: 'HYDRATE', payload: cloudData })
       } else {
+        // 云端无真实数据，检查本地是否有真实数据
         const localData = loadState()
-        if (localData?.portfolios?.length) {
+        if (hasRealData(localData)) {
           cloudSave(localData).catch(console.error)
+        } else if (cloudData?.portfolios?.length) {
+          // 云端和本地都没有真实数据，但云端有结构，仍然 HYDRATE 保持一致
+          dispatch({ type: 'HYDRATE', payload: cloudData })
         }
       }
-    }).catch(console.error)
+    }).catch(console.error).finally(() => {
+      cloudLoadDoneRef.current = true
+    })
   }, [])
 
-  // 状态变化：立即存 localStorage，延迟 1.5s 存云端
+  // 状态变化：立即存 localStorage；云端加载完成后才延迟写云端
   useEffect(() => {
     saveState(state)
+    if (!cloudLoadDoneRef.current) return
     clearTimeout(syncTimerRef.current)
     syncTimerRef.current = setTimeout(() => {
       cloudSave({
