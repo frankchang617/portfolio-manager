@@ -1,8 +1,89 @@
 # 投资组合管理系统 — 任务交接文档
 
-**更新日期**：2026-05-21（第二十一次，GitHub Pages 部署 + 深色模式修复 + Supabase 同步竞态修复）  
+**更新日期**：2026-05-24（第二十三次，修复 HYDRATE 后价格刷新延迟）  
 **技术栈**：React 18 + Vite + Tailwind CSS v3 + Recharts + Supabase  
 **运行地址**：http://localhost:5173（本地）/ https://frankchang617.github.io/portfolio-manager/（公网）
+
+---
+
+## 本次已完成的功能（2026-05-24，第二十三次）
+
+### 修复：打开网站后需等数分钟才能看到最新数据
+
+**根本原因（`src/contexts/PortfolioContext.jsx`）**：
+
+页面加载时的时序问题：
+1. T=0：挂载 → `refreshPrices()` 立即触发 → Finnhub 开始请求
+2. T=2：Finnhub 返回 → `SET_PRICES` → prices 有数据
+3. T=3：Supabase 返回 → `HYDRATE` 派发 → **reducer 里 `prices: {}` 把刚拿到的价格全部清空！**
+4. HYDRATE 后：`refreshPrices` useCallback 因 `state.portfolios` 变化而重建 → timer effect 重置了 60s 计时器，但**没有立即调用 `refreshPrices()`**
+5. 用户等待 ~60 秒才能看到下一次价格刷新
+
+**修复方案**：
+- 新增 `justHydratedRef = useRef(false)`
+- 在 `cloudLoad().then()` 中，dispatch HYDRATE 之前设 `justHydratedRef.current = true`
+- 新增一个 `useEffect([state.portfolios, refreshPrices])`：检测到 `justHydratedRef` 为 true 时，立即调用 `refreshPrices()` 并重置标志
+
+**修复后时序**：
+1. T=0：挂载 → `refreshPrices()` → Finnhub 请求
+2. T=3：HYDRATE → prices 清空，但 `justHydratedRef = true`
+3. T=3+（同 tick）：新 effect 检测到 hydrate → **立即调用 `refreshPrices()`** → Finnhub 再次请求
+4. T=5：Finnhub 返回 → 价格立刻显示 ✅
+
+---
+
+## 本次已完成的功能（2026-05-21，第二十二次）
+
+### 1. 日历盈亏 — 今日未实现盈亏计算修复
+
+**问题**：今日格子显示的是「当日涨跌幅盈亏」`(price - previousClose) × shares`，而不是真正的「未实现盈亏」`(price - avgCost) × shares`。
+
+**修复（`src/components/DailyPnLCalendar.jsx`）**：
+- 计算公式改为 `(q.price - s.avgCost) * s.shares`
+- 去除对 `q.previousClose` 的依赖（之前若 previousClose 为 null 会跳过该股票）
+- 悬停提示标签从「当日市值变动」改为「未实现盈亏」
+- `useMemo` 依赖数组补充 `state.prices`（之前遗漏）
+
+### 2. 图表分析 — 持仓分配明细溢出修复
+
+**问题**：选择「总投资组合」时，持仓股票数量多，右侧「持仓明细」列表高度无限增长，与饼图左卡片产生上下布局错乱。
+
+**修复（`src/components/Charts.jsx`）**：
+- 明细列表容器加入 `max-h-[260px] overflow-y-auto pr-1`，限制高度与左侧饼图一致，超出部分可滚动
+
+### 3. 已提交并推送
+
+- commit `2702240`：`fix: correct today unrealized P&L and fix allocation layout overflow`
+- 已 push 到 `main`，GitHub Actions 自动触发重新部署 GitHub Pages
+
+---
+
+## 当前未完成任务
+
+### IBKR Web API 集成（进行中讨论）
+
+**背景**：用户希望用 IBKR Client Portal REST API 替代或补充 Finnhub 作为行情数据源。
+
+**当前数据源**：`src/utils/api.js` → `fetchQuotes(symbols)` → Finnhub API（`VITE_FINNHUB_KEY`）
+
+**IBKR Client Portal API 特点**：
+- 本地运行 IBKR Gateway，提供 `https://localhost:5000` REST 接口
+- 使用自签名证书（浏览器需手动信任）
+- 只能在本地运行时访问，GitHub Pages 公网版无法使用
+
+**待确认方向**：
+- 双数据源（本地用 IBKR，公网用 Finnhub）？还是纯本地使用 IBKR？
+- 是否同时同步持仓/交易历史？
+
+**相关文件**：
+- `src/utils/api.js`：行情获取核心，替换/扩展此文件
+- `src/contexts/PortfolioContext.jsx`：`refreshPrices()` 调用 `fetchQuotes`
+
+### Superpowers 插件（已安装，未完全激活）
+
+- 插件版本：v5.1.0，路径：`~/.claude/plugins/cache/claude-plugins-official/superpowers/5.1.0/`
+- 提供 skills：`brainstorming`、`writing-plans`、`executing-plans`、`systematic-debugging` 等
+- **当前问题**：skills 未出现在 session 可用列表，需新开 session 后才能自动激活
 
 ---
 

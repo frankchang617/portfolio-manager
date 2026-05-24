@@ -576,11 +576,14 @@ export function PortfolioProvider({ children }) {
   const syncTimerRef = useRef(null)
   // 云端加载完成前不写云端，避免初始空状态覆盖云端真实数据
   const cloudLoadDoneRef = useRef(false)
+  // HYDRATE 后需要立即刷新价格（HYDRATE 会清空 prices: {}）
+  const justHydratedRef = useRef(false)
 
   // 首次挂载：从云端加载数据；云端有真实数据则 HYDRATE，否则将本地真实数据上传
   useEffect(() => {
     cloudLoad().then(cloudData => {
       if (hasRealData(cloudData)) {
+        justHydratedRef.current = true
         dispatch({ type: 'HYDRATE', payload: cloudData })
       } else {
         // 云端无真实数据，检查本地是否有真实数据
@@ -589,6 +592,7 @@ export function PortfolioProvider({ children }) {
           cloudSave(localData).catch(console.error)
         } else if (cloudData?.portfolios?.length) {
           // 云端和本地都没有真实数据，但云端有结构，仍然 HYDRATE 保持一致
+          justHydratedRef.current = true
           dispatch({ type: 'HYDRATE', payload: cloudData })
         }
       }
@@ -633,6 +637,15 @@ export function PortfolioProvider({ children }) {
   }, [state.portfolios])
 
   useEffect(() => { refreshPrices() }, [state.activePortfolioId])
+
+  // HYDRATE 后 portfolios/refreshPrices 都会更新；此时立即刷新价格，
+  // 避免用户等待 60 秒定时器才能看到最新数据
+  useEffect(() => {
+    if (justHydratedRef.current) {
+      justHydratedRef.current = false
+      refreshPrices()
+    }
+  }, [state.portfolios, refreshPrices])
 
   useEffect(() => {
     if (refreshTimerRef.current) clearInterval(refreshTimerRef.current)
