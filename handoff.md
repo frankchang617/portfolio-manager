@@ -1,6 +1,6 @@
 # 投资组合管理系统 — 任务交接文档
 
-**更新日期**：2026-05-24（第二十四次，彻底修复 HYDRATE 清空 prices 问题）  
+**更新日期**：2026-05-24（第二十四次，彻底修复价格加载延迟问题，用户确认生效）  
 **技术栈**：React 18 + Vite + Tailwind CSS v3 + Recharts + Supabase  
 **运行地址**：http://localhost:5173（本地）/ https://frankchang617.github.io/portfolio-manager/（公网）
 
