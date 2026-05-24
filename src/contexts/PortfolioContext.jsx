@@ -551,7 +551,9 @@ function reducer(state, action) {
         portfolios,
         dailySnapshots: saved.dailySnapshots ?? [],
         portfolioSnapshots: saved.portfolioSnapshots ?? {},
-        prices: {},
+        // 不清空 prices：prices 本来就不存储到云端/localStorage，
+        // ...saved 不会带任何 prices 字段，保留 state.prices 可以让
+        // 初始 Finnhub 请求结果在 HYDRATE 后仍然可见，避免等待 60s
         isLoading: false,
         error: null,
       }
