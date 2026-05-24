@@ -1,34 +1,72 @@
 # 投资组合管理系统 — 任务交接文档
 
-**更新日期**：2026-05-24（第二十三次，修复 HYDRATE 后价格刷新延迟）  
+**更新日期**：2026-05-24（第二十四次，彻底修复 HYDRATE 清空 prices 问题）  
 **技术栈**：React 18 + Vite + Tailwind CSS v3 + Recharts + Supabase  
 **运行地址**：http://localhost:5173（本地）/ https://frankchang617.github.io/portfolio-manager/（公网）
 
 ---
 
-## 本次已完成的功能（2026-05-24，第二十三次）
+## 本次已完成的功能（2026-05-24，第二十三/二十四次）
 
-### 修复：打开网站后需等数分钟才能看到最新数据
+### 彻底修复：打开网站后需等 ~60 秒才能看到最新数据
 
-**根本原因（`src/contexts/PortfolioContext.jsx`）**：
+#### 根本原因（`src/contexts/PortfolioContext.jsx`）
 
-页面加载时的时序问题：
-1. T=0：挂载 → `refreshPrices()` 立即触发 → Finnhub 开始请求
-2. T=2：Finnhub 返回 → `SET_PRICES` → prices 有数据
-3. T=3：Supabase 返回 → `HYDRATE` 派发 → **reducer 里 `prices: {}` 把刚拿到的价格全部清空！**
-4. HYDRATE 后：`refreshPrices` useCallback 因 `state.portfolios` 变化而重建 → timer effect 重置了 60s 计时器，但**没有立即调用 `refreshPrices()`**
-5. 用户等待 ~60 秒才能看到下一次价格刷新
+**时序问题全链路**：
+```
+T=0:  挂载 → refreshPrices() 立即触发（Finnhub 开始请求）
+T=2:  Finnhub 返回 → SET_PRICES → prices 有数据 ✅
+T=3:  Supabase 返回 → HYDRATE 派发
+      └─ ❌ reducer 第 554 行: prices: {} 把刚拿到的价格全部清空！
+T=3+: refreshPrices useCallback 因 portfolios 变化而重建
+      timer effect 重置 60s 计时器，但没有立即调用 refreshPrices()
+T=63: 60 秒后定时器才触发 → 价格终于出现
+```
 
-**修复方案**：
-- 新增 `justHydratedRef = useRef(false)`
-- 在 `cloudLoad().then()` 中，dispatch HYDRATE 之前设 `justHydratedRef.current = true`
-- 新增一个 `useEffect([state.portfolios, refreshPrices])`：检测到 `justHydratedRef` 为 true 时，立即调用 `refreshPrices()` 并重置标志
+另外用户反映**刷新按钮没有反应**：因为 GitHub Pages 首次加载时 localStorage 为空，
+`state.portfolios = [samplePortfolio]`（仅聚合组合，无子组合），
+`refreshPrices()` 第一行 `subPortfolios.length === 0` 直接 return，
+Supabase HYDRATE 完成前点击刷新全部无效。
+
+#### 修复一（commit `41be541`）
+
+新增 `justHydratedRef = useRef(false)`，HYDRATE 完成后立即调用 `refreshPrices()`：
+```js
+// cloudLoad effect 中
+justHydratedRef.current = true
+dispatch({ type: 'HYDRATE', payload: cloudData })
+
+// 新增 effect
+useEffect(() => {
+  if (justHydratedRef.current) {
+    justHydratedRef.current = false
+    refreshPrices()
+  }
+}, [state.portfolios, refreshPrices])
+```
+
+#### 修复二（commit `96b6cda`）— 更根本的修复
+
+直接去掉 HYDRATE reducer 中的 `prices: {}`：
+
+```js
+// 修复前
+return { ...state, ...saved, portfolios, ..., prices: {}, isLoading: false }
+
+// 修复后
+return { ...state, ...saved, portfolios, ..., isLoading: false }
+// （保留 state.prices，prices 本来就不存云端/localStorage，...saved 不带 prices）
+```
 
 **修复后时序**：
-1. T=0：挂载 → `refreshPrices()` → Finnhub 请求
-2. T=3：HYDRATE → prices 清空，但 `justHydratedRef = true`
-3. T=3+（同 tick）：新 effect 检测到 hydrate → **立即调用 `refreshPrices()`** → Finnhub 再次请求
-4. T=5：Finnhub 返回 → 价格立刻显示 ✅
+```
+T=0:  挂载 → refreshPrices() → Finnhub 请求
+T=2:  Finnhub 返回 → prices 有数据 ✅
+T=3:  HYDRATE → prices 保留（不清空）✅ + justHydratedRef effect 再发一次请求（新 symbol 用）
+T=4:  第二次 Finnhub 返回 → prices 更新 ✅
+```
+
+两个 commit 双保险，彻底消除 ~60 秒等待。
 
 ---
 
