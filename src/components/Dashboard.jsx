@@ -31,20 +31,35 @@ function positionAtDate(stock, targetDate) {
   return { shares, avgCost: shares > 0 ? totalCost / shares : 0 }
 }
 
-// Compute cash balance at dateStr by reversing stock transactions that happened after dateStr.
+// Compute cash balance at dateStr by reversing transactions that happened after dateStr.
 // Works backward from the known current portfolio.cash.
 function cashAtDate(portfolio, dateStr) {
   let cash = portfolio.cash ?? 0
+  // Undo stock transactions after dateStr
   for (const s of portfolio.stocks ?? []) {
     for (const t of s.transactions ?? []) {
       if (!t.date || t.date <= dateStr) continue
-      if (t.action === 'buy') {
-        // Buy happened after dateStr → undo it: add back what was spent
-        cash += t.price * t.shares + (t.commission ?? 0)
-      } else if (t.action === 'sell') {
-        // Sell happened after dateStr → undo it: subtract what was received
-        cash -= t.price * t.shares - (t.commission ?? 0)
-      }
+      if (t.action === 'buy') cash += t.price * t.shares + (t.commission ?? 0)
+      else if (t.action === 'sell') cash -= t.price * t.shares - (t.commission ?? 0)
+    }
+  }
+  // Undo option cash flows after dateStr
+  for (const o of portfolio.options ?? []) {
+    const contracts = Math.abs(o.contracts ?? 1)
+    const openCash = (o.premium ?? 0) * contracts * 100
+    const openComm = o.commission ?? 0
+    // Undo opening premium if option was opened after dateStr
+    if (o.tradeDate && o.tradeDate > dateStr) {
+      if (o.direction === 'sell') cash -= openCash - openComm   // received premium → undo: subtract
+      else                        cash += openCash + openComm   // paid premium → undo: add back
+    }
+    // Undo closing cash flow if option closed after dateStr but opened on/before dateStr
+    if (o.status === 'closed' && o.closeDate && o.closeDate > dateStr &&
+        (!o.tradeDate || o.tradeDate <= dateStr)) {
+      const closeCash = (o.closePrice ?? 0) * contracts * 100
+      const closeComm = o.closeCommission ?? 0
+      if (o.direction === 'sell') cash += closeCash + closeComm  // paid to buy back → undo: add back
+      else                        cash -= closeCash - closeComm  // received to close → undo: subtract
     }
   }
   return Math.max(0, cash)
@@ -465,6 +480,7 @@ export default function Dashboard({ setActiveTab }) {
     for (const dateStr of sorted) {
       let totalValue = 0
       for (const p of allPortfolios) {
+        // Stock market value
         for (const s of p.stocks ?? []) {
           const sym = s.symbol.toUpperCase()
           const price = histPrices[sym]?.[dateStr]
@@ -472,7 +488,26 @@ export default function Dashboard({ setActiveTab }) {
           const { shares } = positionAtDate(s, dateStr)
           if (shares > 0) totalValue += shares * price
         }
+        // Cash (option premium cash flows already reversed inside cashAtDate)
         totalValue += cashAtDate(p, dateStr)
+        // Option intrinsic value for positions open on this date.
+        // Premium cash is already accounted for in cashAtDate.
+        // Seller: option is a liability → subtract intrinsic value.
+        // Buyer:  option is an asset   → add intrinsic value.
+        for (const o of p.options ?? []) {
+          if (!o.tradeDate || o.tradeDate > dateStr) continue
+          if (o.closeDate && o.closeDate <= dateStr) continue
+          const sym = o.symbol?.toUpperCase()
+          if (!sym) continue
+          const price = histPrices[sym]?.[dateStr]
+          if (!price) continue
+          const contracts = Math.abs(o.contracts ?? 1)
+          const intrinsic = o.optionType === 'call'
+            ? Math.max(0, price - o.strike)
+            : Math.max(0, o.strike - price)
+          if (o.direction === 'sell') totalValue -= intrinsic * contracts * 100
+          else                        totalValue += intrinsic * contracts * 100
+        }
       }
       if (totalValue > 0) result.push({ date: dateStr, totalValue })
     }
