@@ -39,8 +39,18 @@
 - [x] DailyPnLCalendar.jsx：新增年度/YTD 已实现盈亏汇总卡片
 - [x] src/utils/api.js：新增 fetchHistoricalPrices（Yahoo Finance + localStorage 24h 缓存）
 
-#### 待做（下一步）
-- [ ] DailyPnLCalendar 接入历史价格，历史格子显示当日未实现盈亏（需先重放交易记录算出当日持仓）
+#### 已完成（第二十六次续）
+- [x] DailyPnLCalendar 接入 Yahoo Finance 历史价格
+  - 用户确认：所有股票均为美股格式（`AAPL`、`NVDA` 等），直接用 Yahoo Finance 无需后缀
+  - `positionAtDate(stock, targetDate)`：重放某支股票截止某日的交易记录，返回当日 `{shares, avgCost}`
+  - `calcUnrealizedAtDate(portfolios, histPrices, dateStr)`：汇总各组合所有股票当日未实现盈亏
+  - `useEffect` 批量 fetch 各 symbol 历史价格 → `histPrices` state；已 fetch 的 symbol 用 `fetchedSymbols ref` 去重，避免重复请求
+  - 日历格子：过去日期如有历史价格则显示当日持仓未实现盈亏（蓝色调背景，强度按盈亏大小渐变）
+  - `getPnlDisplay` 优先级：已实现 > 历史未实现（蓝色）> 快照当日涨跌
+  - 月末未实现盈亏卡片：改用历史价格算最后一个交易日，兜底用旧快照；加载中显示 `animate-pulse` 提示
+  - Hover tooltip：显示「持仓未实现盈亏」（蓝色）和「已实现盈亏」（绿/红）两行
+
+---
 
 ---
 
