@@ -490,24 +490,6 @@ export default function Dashboard({ setActiveTab }) {
         }
         // Cash (option premium cash flows already reversed inside cashAtDate)
         totalValue += cashAtDate(p, dateStr)
-        // Option intrinsic value for positions open on this date.
-        // Premium cash is already accounted for in cashAtDate.
-        // Seller: option is a liability → subtract intrinsic value.
-        // Buyer:  option is an asset   → add intrinsic value.
-        for (const o of p.options ?? []) {
-          if (!o.tradeDate || o.tradeDate > dateStr) continue
-          if (o.closeDate && o.closeDate <= dateStr) continue
-          const sym = o.symbol?.toUpperCase()
-          if (!sym) continue
-          const price = histPrices[sym]?.[dateStr]
-          if (!price) continue
-          const contracts = Math.abs(o.contracts ?? 1)
-          const intrinsic = o.optionType === 'call'
-            ? Math.max(0, price - o.strike)
-            : Math.max(0, o.strike - price)
-          if (o.direction === 'sell') totalValue -= intrinsic * contracts * 100
-          else                        totalValue += intrinsic * contracts * 100
-        }
       }
       if (totalValue > 0) result.push({ date: dateStr, totalValue })
     }

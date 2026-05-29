@@ -6,15 +6,18 @@
 
 ---
 
-## 最新状态（2026-05-29，第三十一次，进行中）
+## 最新状态（2026-05-29，第三十二次）✅
 
-### 资产走势图加入期权损益（进行中）
+### 走势图移除期权内在价值调整
 
-**已完成**：
-- [x] `cashAtDate` 扩展：加入期权现金流逆推（开仓权利金 + 平仓现金流）
-- [ ] `historicalAssetData` useMemo：加入期权内在价值调整（卖方-内在价值作为负债，买方+内在价值作为资产）
+**问题背景**：用户发现走势图末尾总资产 ≠ 跨组合总资产卡片，排查出三个原因：
+1. 价格来源不同（Yahoo Finance 历史 vs Finnhub 实时）
+2. 走势图对期权计算了内在价值（买方加、卖方减），卡片 `totalValue` 不含此项
+3. 日期不同（走势图末尾是上一交易日，卡片是今日实时）
 
-**期权数据字段**：`o.optionType`（call/put）、`o.direction`（buy/sell）、`o.symbol`、`o.contracts`、`o.premium`、`o.tradeDate`、`o.closeDate`、`o.closePrice`、`o.strike`
+**修改**：删除 `historicalAssetData` useMemo 中期权内在价值调整的整段代码（原 Dashboard.jsx ~497-510 行），走势图仅保留：股票市值 + `cashAtDate`（含期权现金流逆推）。
+
+**决策**：期权不作为资产/负债计入走势图，与卡片口径一致（股票 + 现金）。
 
 ---
 
