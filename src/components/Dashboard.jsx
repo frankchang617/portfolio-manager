@@ -454,6 +454,9 @@ export default function Dashboard({ setActiveTab }) {
     if (Object.keys(histPrices).length === 0) return null
     const allPortfolios = state.portfolios.filter(p => !p.isAggregate)
     const todayStr = new Date().toISOString().split('T')[0]
+    // Only use Yahoo Finance data up to yesterday — today's data is incomplete
+    const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1)
+    const yesterdayStr = yesterday.toISOString().split('T')[0]
 
     // Find earliest transaction date across all portfolios
     let earliest = null
@@ -466,11 +469,11 @@ export default function Dashboard({ setActiveTab }) {
     }
     if (!earliest) return null
 
-    // Collect every trading date from histPrices within range
+    // Collect every trading date from histPrices within range (exclude today)
     const allDates = new Set()
     for (const prices of Object.values(histPrices)) {
       for (const date of Object.keys(prices)) {
-        if (date >= earliest && date <= todayStr) allDates.add(date)
+        if (date >= earliest && date <= yesterdayStr) allDates.add(date)
       }
     }
     if (allDates.size === 0) return null
@@ -493,8 +496,24 @@ export default function Dashboard({ setActiveTab }) {
       }
       if (totalValue > 0) result.push({ date: dateStr, totalValue })
     }
+
+    // Append today's data point using real-time Finnhub prices (same source as summary cards)
+    let todayValue = 0
+    let hasTodayPrice = false
+    for (const p of allPortfolios) {
+      for (const s of p.stocks ?? []) {
+        const sym = s.symbol.toUpperCase()
+        const rtPrice = prices[sym]?.price
+        if (!rtPrice) continue
+        const { shares } = positionAtDate(s, todayStr)
+        if (shares > 0) { todayValue += shares * rtPrice; hasTodayPrice = true }
+      }
+      todayValue += cashAtDate(p, todayStr)
+    }
+    if (hasTodayPrice && todayValue > 0) result.push({ date: todayStr, totalValue: todayValue })
+
     return result.length >= 2 ? result : null
-  }, [state.portfolios, histPrices])
+  }, [state.portfolios, histPrices, prices])
 
   const snapshotData = useMemo(() => {
     // Prefer reconstructed historical data; fall back to dailySnapshots
