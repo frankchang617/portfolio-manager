@@ -16,8 +16,10 @@ function calcAnnualizedReturn(snapshots) {
   const last = snapshots[snapshots.length - 1]
   if (!first.totalValue || first.totalValue <= 0) return null
   const days = (new Date(last.date) - new Date(first.date)) / 86400000
-  if (days < 1) return null
-  return (Math.pow(last.totalValue / first.totalValue, 365 / days) - 1) * 100
+  if (days < 30) return null  // 不足30天数据，年化无意义
+  const result = (Math.pow(last.totalValue / first.totalValue, 365 / days) - 1) * 100
+  if (!isFinite(result) || Math.abs(result) > 9999) return null  // 超过9999%视为异常
+  return result
 }
 
 function calcMaxDrawdown(snapshots) {

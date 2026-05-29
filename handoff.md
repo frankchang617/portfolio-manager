@@ -1,8 +1,40 @@
 # 投资组合管理系统 — 任务交接文档
 
-**更新日期**：2026-05-24（第二十四次，彻底修复价格加载延迟问题，用户确认生效）  
+**更新日期**：2026-05-29（第二十五次，修复总览年化收益异常值）  
 **技术栈**：React 18 + Vite + Tailwind CSS v3 + Recharts + Supabase  
 **运行地址**：http://localhost:5173（本地）/ https://frankchang617.github.io/portfolio-manager/（公网）
+
+---
+
+## 本次已完成的功能（2026-05-29，第二十五次）
+
+### 修复：总览组合卡片年化收益显示天文数字
+
+**问题**：致富证券等组合卡片中「年化收益」显示 `+237918430674848384.50%`，数值完全失真。
+
+**根本原因**（`src/components/Dashboard.jsx` → `calcAnnualizedReturn`）：
+
+年化收益使用 CAGR 公式：`(终值/初值)^(365/days) - 1`
+
+当快照数据时间跨度极短（如仅 1–2 天）时，指数 `365/days` 会达到 365 甚至更高，将任何微小涨幅放大成天文数字。
+
+**修复（commit 即将提交）**：
+
+```js
+// 修复前
+if (days < 1) return null
+return (Math.pow(last.totalValue / first.totalValue, 365 / days) - 1) * 100
+
+// 修复后
+if (days < 30) return null  // 不足30天数据，年化无意义
+const result = (Math.pow(last.totalValue / first.totalValue, 365 / days) - 1) * 100
+if (!isFinite(result) || Math.abs(result) > 9999) return null  // 超过9999%视为异常
+return result
+```
+
+两道防护：
+1. **`days < 30` → null**：不足 30 天的快照，年化计算无统计意义，显示 `—`
+2. **`Math.abs(result) > 9999` → null**：兜底防浮点溢出，避免天文数字渗出
 
 ---
 
