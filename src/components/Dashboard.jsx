@@ -10,16 +10,74 @@ import { fmt, getPnLClass } from '../utils/formatters'
 import { calculateOptionMetrics } from '../utils/blackScholes'
 
 // ── Performance statistics helpers ──────────────────────────────────────────
-function calcAnnualizedReturn(snapshots) {
-  if (!snapshots || snapshots.length < 2) return null
-  const first = snapshots[0]
-  const last = snapshots[snapshots.length - 1]
-  if (!first.totalValue || first.totalValue <= 0) return null
-  const days = (new Date(last.date) - new Date(first.date)) / 86400000
-  if (days < 30) return null  // 不足30天数据，年化无意义
-  const result = (Math.pow(last.totalValue / first.totalValue, 365 / days) - 1) * 100
-  if (!isFinite(result) || Math.abs(result) > 9999) return null  // 超过9999%视为异常
-  return result
+
+// IRR via Newton-Raphson: cash flows = [{days, amount}], days from t0
+function solveIRR(flows) {
+  const npv  = r => flows.reduce((s, cf) => s + cf.amount / Math.pow(1 + r, cf.days), 0)
+  const dnpv = r => flows.reduce((s, cf) => s - cf.days * cf.amount / Math.pow(1 + r, cf.days + 1), 0)
+  let r = 0.001
+  for (let i = 0; i < 300; i++) {
+    const f = npv(r), df = dnpv(r)
+    if (Math.abs(df) < 1e-15) break
+    const nr = r - f / df
+    if (Math.abs(nr - r) < 1e-10) { r = nr; break }
+    r = Math.max(nr, -0.9999)
+  }
+  return r
+}
+
+// Transaction-based annualized return (MWRR/IRR), no snapshots needed.
+// Each buy = negative cash flow, each sell = positive, today's market value = terminal inflow.
+function calcPortfolioIRR(portfolio, prices) {
+  const flows = []   // {date: Date, amount: number}
+
+  for (const stock of portfolio.stocks ?? []) {
+    const txns = (stock.transactions ?? [])
+      .filter(t => t.date && (t.action === 'buy' || t.action === 'sell'))
+      .map(t => ({ ...t, _d: new Date(t.date) }))
+
+    // Initial position (pre-transaction shares) treated as a buy one day before first txn
+    if ((stock.initialShares ?? 0) > 0 && stock.initialAvgCost > 0) {
+      const anchor = txns.length > 0
+        ? new Date(txns.reduce((m, t) => t._d < m ? t._d : m, txns[0]._d).getTime() - 86400000)
+        : null
+      if (anchor) flows.push({ date: anchor, amount: -(stock.initialShares * stock.initialAvgCost) })
+    }
+
+    for (const t of txns) {
+      const commission = t.commission ?? 0
+      flows.push({
+        date: t._d,
+        amount: t.action === 'buy'
+          ? -(t.price * t.shares + commission)
+          :   t.price * t.shares - commission,
+      })
+    }
+  }
+
+  if (flows.length === 0) return null
+
+  // Terminal value: current market value of remaining positions + cash
+  const today = new Date()
+  let terminal = portfolio.cash ?? 0
+  for (const stock of portfolio.stocks ?? []) {
+    if (stock.shares > 0) {
+      const p = prices[stock.symbol.toUpperCase()]?.price ?? stock.avgCost
+      terminal += p * stock.shares
+    }
+  }
+  flows.push({ date: today, amount: terminal })
+
+  const t0 = flows.reduce((m, cf) => cf.date < m ? cf.date : m, flows[0].date)
+  const totalDays = (today - t0) / 86400000
+  if (totalDays < 7) return null
+
+  const normalized = flows.map(cf => ({ days: Math.max(0, (cf.date - t0) / 86400000), amount: cf.amount }))
+
+  const r = solveIRR(normalized)
+  const annualized = (Math.pow(1 + r, 365) - 1) * 100
+  if (!isFinite(annualized) || Math.abs(annualized) > 9999) return null
+  return annualized
 }
 
 function calcMaxDrawdown(snapshots) {
@@ -128,8 +186,8 @@ function MetricCard({ emoji, label, value, sub, pnl, highlight, breakdown }) {
 }
 
 // ── Portfolio card (grid item) ───────────────────────────────────────────────
-function PortfolioCard({ portfolio, metrics, snapshots, isActive, onSelect }) {
-  const annualizedReturn = calcAnnualizedReturn(snapshots)
+function PortfolioCard({ portfolio, metrics, snapshots, prices, isActive, onSelect }) {
+  const annualizedReturn = calcPortfolioIRR(portfolio, prices ?? {})
   const maxDrawdown = calcMaxDrawdown(snapshots)
   const hasPerf = annualizedReturn !== null || maxDrawdown !== null
 
@@ -459,6 +517,7 @@ export default function Dashboard({ setActiveTab }) {
               portfolio={portfolio}
               metrics={metrics}
               snapshots={state.portfolioSnapshots?.[portfolio.id]}
+              prices={prices}
               isActive={portfolio.id === state.activePortfolioId}
               onSelect={() => {
                 dispatch({ type: 'SELECT_PORTFOLIO', id: portfolio.id })

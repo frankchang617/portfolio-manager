@@ -120,6 +120,23 @@ export default function DailyPnLCalendar() {
     return snaps[snaps.length - 1].unrealizedPnL ?? null
   }, [state.dailySnapshots, year, month, isAggregate])
 
+  // Yearly realized P&L for the currently viewed year
+  const yearlySummary = useMemo(() => {
+    const prefix = `${year}-`
+    return Object.entries(dailyData)
+      .filter(([d]) => d.startsWith(prefix))
+      .reduce((sum, [, v]) => sum + (v.realized ?? 0), 0)
+  }, [dailyData, year])
+
+  // YTD realized P&L: Jan 1 of current real year → today
+  const ytdSummary = useMemo(() => {
+    const curYear = new Date().getFullYear()
+    const prefix = `${curYear}-`
+    return Object.entries(dailyData)
+      .filter(([d]) => d.startsWith(prefix) && d <= todayStr)
+      .reduce((sum, [, v]) => sum + (v.realized ?? 0), 0)
+  }, [dailyData, todayStr])
+
   const monthlySummary = useMemo(() => {
     let totalRealized = 0
     let totalTodayPnL = 0
@@ -227,6 +244,29 @@ export default function DailyPnLCalendar() {
               {m}
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* Yearly / YTD summary bar */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="card p-4 flex items-center justify-between">
+          <div>
+            <p className="text-xs text-claude-muted font-medium mb-1">{year} 年已实现盈亏</p>
+            <p className={`text-2xl font-bold ${getPnLClass(yearlySummary)}`}>
+              {yearlySummary !== 0 ? fmt.pnl(yearlySummary) : '—'}
+            </p>
+          </div>
+          <span className="text-3xl opacity-20">📅</span>
+        </div>
+        <div className="card p-4 flex items-center justify-between">
+          <div>
+            <p className="text-xs text-claude-muted font-medium mb-1">年初至今（YTD）已实现盈亏</p>
+            <p className={`text-2xl font-bold ${getPnLClass(ytdSummary)}`}>
+              {ytdSummary !== 0 ? fmt.pnl(ytdSummary) : '—'}
+            </p>
+            <p className="text-xs text-claude-muted mt-1">{new Date().getFullYear()} 年 1 月 1 日至今</p>
+          </div>
+          <span className="text-3xl opacity-20">📈</span>
         </div>
       </div>
 

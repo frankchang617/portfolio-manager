@@ -58,6 +58,56 @@ export async function fetchCompanyProfile(symbol) {
   return { name: d.name }
 }
 
+// ── Historical daily closes (Yahoo Finance, free, no key needed) ─────────────
+// Symbol formats: US='AAPL', HK='0700.HK', SG='D05.SI', TW='2330.TW'
+// Cache key v1 — bump to 'yf_hist_v2' if data schema changes
+const YF_CACHE_KEY = 'yf_hist_v1'
+const YF_CACHE_TTL = 24 * 60 * 60 * 1000  // 24 h
+
+function _yfCacheRead() {
+  try { return JSON.parse(localStorage.getItem(YF_CACHE_KEY) || '{}') } catch { return {} }
+}
+function _yfCacheWrite(cache) {
+  try { localStorage.setItem(YF_CACHE_KEY, JSON.stringify(cache)) } catch {}
+}
+
+/**
+ * Fetch daily closing prices from Yahoo Finance via a CORS proxy.
+ * Returns { [dateStr: 'YYYY-MM-DD']: closePrice } for the requested range.
+ * Results are cached in localStorage for 24 h per symbol+range pair.
+ *
+ * @param {string} symbol  Yahoo Finance ticker (e.g. 'AAPL', '0700.HK', 'D05.SI')
+ * @param {string} range   Yahoo Finance range string: '1y' | '2y' | '5y' | 'max'
+ */
+export async function fetchHistoricalPrices(symbol, range = '5y') {
+  const cache = _yfCacheRead()
+  const key = `${symbol}_${range}`
+  if (cache[key] && Date.now() - cache[key].ts < YF_CACHE_TTL) return cache[key].data
+
+  const yfUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=${range}`
+  const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(yfUrl)}`
+
+  const res = await fetch(proxyUrl)
+  if (!res.ok) throw new Error(`fetchHistoricalPrices ${symbol}: HTTP ${res.status}`)
+  const json = await res.json()
+
+  const result = json.chart?.result?.[0]
+  if (!result) throw new Error(`fetchHistoricalPrices ${symbol}: no data returned`)
+
+  const timestamps = result.timestamp ?? []
+  const closes = result.indicators?.quote?.[0]?.close ?? []
+  const data = {}
+  timestamps.forEach((ts, i) => {
+    if (closes[i] != null) {
+      data[new Date(ts * 1000).toISOString().split('T')[0]] = closes[i]
+    }
+  })
+
+  cache[key] = { ts: Date.now(), data }
+  _yfCacheWrite(cache)
+  return data
+}
+
 /**
  * Extract all unique underlying symbols from a portfolio
  */

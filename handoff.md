@@ -1,8 +1,71 @@
 # 投资组合管理系统 — 任务交接文档
 
-**更新日期**：2026-05-29（第二十五次，修复总览年化收益异常值）  
+**更新日期**：2026-05-29（第二十六次，规划并实施 IRR 年化收益 + 日历P&L汇总 + Yahoo Finance 历史价格）  
 **技术栈**：React 18 + Vite + Tailwind CSS v3 + Recharts + Supabase  
 **运行地址**：http://localhost:5173（本地）/ https://frankchang617.github.io/portfolio-manager/（公网）
+
+---
+
+## 当前进行中（2026-05-29，第二十六次）
+
+### 三项并行开发：IRR年化收益 + 日历P&L汇总 + Yahoo Finance 历史价格
+
+#### 背景分析
+用户已上传完整交易记录（每笔含 date、action、price、shares、commission），
+当前年化收益依赖 dailySnapshots（每次刷新价格才存一条），新组合快照太少导致显示 `—`。
+
+#### 方案决策
+
+**1. 年化收益 → IRR（内部收益率）替换 CAGR**
+- 文件：`src/components/Dashboard.jsx` → `calcAnnualizedReturn` 改为 `calcIRR`
+- 每笔买入 = 负现金流，每笔卖出 = 正现金流，今日市值 = 最终流入
+- Newton-Raphson 迭代解日利率 → 年化：`(1+r)^365 - 1`
+- 优势：不依赖快照，第一笔交易后即可算出
+
+**2. 日历盈亏汇总 → 月度/年度/年初至今已实现盈亏**
+- 文件：`src/components/DailyPnLCalendar.jsx`
+- 数据来源：股票 sell transactions `realizedPnL` + 期权 closeDate `realizedPnL`
+- 新增页面顶部汇总栏：本月已实现、本年已实现、年初至今（YTD）
+
+**3. 历史每日收盘价 → Yahoo Finance 免费 API**
+- 端点：`https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=5y`
+- 支持美股（AAPL）、港股（0700.HK）、新加坡（D05.SI）
+- 缓存到 localStorage，避免重复请求
+- 用于：日历历史格子的未实现盈亏（按持仓状态重算）
+
+#### 已完成
+- [x] 读取 DailyPnLCalendar.jsx 和 PortfolioContext.jsx 数据结构
+- [x] Dashboard.jsx：IRR 算法替换 snapshot-based CAGR
+- [x] DailyPnLCalendar.jsx：新增年度/YTD 已实现盈亏汇总卡片
+- [x] src/utils/api.js：新增 fetchHistoricalPrices（Yahoo Finance + localStorage 24h 缓存）
+
+#### 待做（下一步）
+- [ ] DailyPnLCalendar 接入历史价格，历史格子显示当日未实现盈亏（需先重放交易记录算出当日持仓）
+
+---
+
+### 关键实现细节
+
+#### IRR（`src/components/Dashboard.jsx`）
+- 新增 `solveIRR(flows)` — Newton-Raphson，最多 300 次迭代
+- 新增 `calcPortfolioIRR(portfolio, prices)` — 从 transactions 收集现金流：
+  - 买入 = `-(price × shares + commission)`
+  - 卖出 = `+(price × shares − commission)`
+  - initialShares > 0 时：当作第一笔交易前一天的买入
+  - 今日市值（含 cash）= 终值现金流入
+- `PortfolioCard` 改接 `prices` prop，调用 `calcPortfolioIRR` 取代快照 CAGR
+
+#### 年度/YTD 汇总（`src/components/DailyPnLCalendar.jsx`）
+- `yearlySummary`：当前查看年份所有 `dailyData[date].realized` 之和
+- `ytdSummary`：当年 1 月 1 日 → 今天的 realized 之和
+- 日历页面顶部新增 2 张卡片：「{year} 年已实现盈亏」和「年初至今（YTD）已实现盈亏」
+
+#### Yahoo Finance API（`src/utils/api.js`）
+- `fetchHistoricalPrices(symbol, range='5y')`
+- CORS 代理：`https://corsproxy.io/?{encoded_url}`
+- 支持格式：US=`AAPL`，HK=`0700.HK`，SG=`D05.SI`，TW=`2330.TW`
+- 缓存：localStorage key `yf_hist_v1`，24 小时 TTL
+- 返回 `{ 'YYYY-MM-DD': closePrice }` 字典
 
 ---
 
