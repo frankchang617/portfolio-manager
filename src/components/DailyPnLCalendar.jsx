@@ -394,141 +394,135 @@ export default function DailyPnLCalendar() {
         </div>
       </div>
 
-      {/* All-time summary */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="card p-4">
-          <p className="text-xs text-claude-muted font-medium mb-1">总已实现盈亏</p>
-          <p className={`text-2xl font-bold ${getPnLClass(totalRealizedPnL)}`}>
-            {totalRealizedPnL !== 0 ? fmt.pnl(totalRealizedPnL) : '—'}
-          </p>
-          <p className="text-xs text-claude-muted mt-1">历史全部已实现</p>
-        </div>
-        <div className="card p-4">
-          <p className="text-xs text-claude-muted font-medium mb-1">总未实现盈亏</p>
-          <p className={`text-2xl font-bold ${getPnLClass(currentUnrealizedPnL)}`}>
-            {currentUnrealizedPnL !== 0 ? fmt.pnl(currentUnrealizedPnL) : '—'}
-          </p>
-          <p className="text-xs text-claude-muted mt-1">当前持仓实时浮盈</p>
-        </div>
-        <div className="card p-4">
-          <p className="text-xs text-claude-muted font-medium mb-1">总盈亏</p>
-          <p className={`text-2xl font-bold ${getPnLClass(totalPnL)}`}>
-            {totalPnL !== 0 ? fmt.pnl(totalPnL) : '—'}
-          </p>
-          <p className="text-xs text-claude-muted mt-1">已实现 + 未实现</p>
-        </div>
-      </div>
+      {/* Summary panels — three grouped section cards */}
+      <div className="space-y-3">
 
-      {/* YTD summary */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="card p-4">
-          <p className="text-xs text-claude-muted font-medium mb-1">年初至今已实现</p>
-          <p className={`text-2xl font-bold ${getPnLClass(ytdSummary)}`}>
-            {ytdSummary !== 0 ? fmt.pnl(ytdSummary) : '—'}
-          </p>
-          <p className="text-xs text-claude-muted mt-1">{new Date().getFullYear()} 年 1 月 1 日起</p>
-        </div>
-        <div className="card p-4">
-          <p className="text-xs text-claude-muted font-medium mb-1">年初至今未实现</p>
-          <p className={`text-2xl font-bold ${getPnLClass(currentUnrealizedPnL)}`}>
-            {currentUnrealizedPnL !== 0 ? fmt.pnl(currentUnrealizedPnL) : '—'}
-          </p>
-          <p className="text-xs text-claude-muted mt-1">当前持仓实时浮盈</p>
-        </div>
-        <div className="card p-4">
-          <p className="text-xs text-claude-muted font-medium mb-1">年初至今总盈亏</p>
-          <p className={`text-2xl font-bold ${getPnLClass(ytdTotalPnL)}`}>
-            {ytdTotalPnL !== 0 ? fmt.pnl(ytdTotalPnL) : '—'}
-          </p>
-          <p className="text-xs text-claude-muted mt-1">YTD 已实现 + 当前未实现</p>
-        </div>
-      </div>
-
-      {/* Monthly summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-        <div className="card p-4">
-          <p className="text-xs text-claude-muted mb-2 font-medium">月度已实现盈亏</p>
-          <p className={`text-2xl font-bold ${getPnLClass(monthlySummary.totalRealized)}`}>
-            {monthlySummary.totalRealized !== 0 ? fmt.pnl(monthlySummary.totalRealized) : '—'}
-          </p>
-          <p className="text-xs text-claude-muted mt-1">{monthlySummary.tradingDays} 个有数据日</p>
-        </div>
-
-        <div className="card p-4">
-          <p className="text-xs text-claude-muted mb-2 font-medium">月度未实现变动</p>
-          {histLoading && monthlyUnrealizedPnL == null ? (
-            <p className="text-sm text-claude-muted animate-pulse">加载历史价格中…</p>
-          ) : (
-            <>
-              <p className={`text-2xl font-bold ${getPnLClass(monthlyUnrealizedPnL)}`}>
-                {monthlyUnrealizedPnL != null ? fmt.pnl(monthlyUnrealizedPnL) : '—'}
+        {/* All-time */}
+        <div className="card p-5">
+          <p className="text-[11px] font-semibold text-claude-muted uppercase tracking-wider mb-4">总览</p>
+          <div className="flex">
+            <div className="flex-1 pr-5">
+              <p className="text-xs text-claude-muted mb-1">总盈亏</p>
+              <p className={`text-2xl font-bold ${getPnLClass(totalPnL)}`}>
+                {totalPnL !== 0 ? fmt.pnl(totalPnL) : '—'}
               </p>
-              <p className="text-xs text-claude-muted mt-1">
-                {monthlyUnrealizedPnL != null ? '月末 − 月初浮盈' : '暂无历史价格'}
+              <p className="text-xs text-claude-muted mt-1">已实现 + 未实现</p>
+            </div>
+            <div className="flex-1 px-5 border-l border-claude-border">
+              <p className="text-xs text-claude-muted mb-1">已实现</p>
+              <p className={`text-xl font-bold ${getPnLClass(totalRealizedPnL)}`}>
+                {totalRealizedPnL !== 0 ? fmt.pnl(totalRealizedPnL) : '—'}
               </p>
-            </>
-          )}
-        </div>
-
-        <div className="card p-4">
-          <p className="text-xs text-claude-muted mb-2 font-medium">月度总盈亏</p>
-          {histLoading && monthlyTotalPnL == null ? (
-            <p className="text-sm text-claude-muted animate-pulse">加载中…</p>
-          ) : (
-            <>
-              <p className={`text-2xl font-bold ${getPnLClass(monthlyTotalPnL)}`}>
-                {monthlyTotalPnL != null ? fmt.pnl(monthlyTotalPnL) : '—'}
+              <p className="text-xs text-claude-muted mt-1">历史全部</p>
+            </div>
+            <div className="flex-1 pl-5 border-l border-claude-border">
+              <p className="text-xs text-claude-muted mb-1">未实现</p>
+              <p className={`text-xl font-bold ${getPnLClass(currentUnrealizedPnL)}`}>
+                {currentUnrealizedPnL !== 0 ? fmt.pnl(currentUnrealizedPnL) : '—'}
               </p>
-              <p className="text-xs text-claude-muted mt-1">未实现变动 + 已实现</p>
-            </>
-          )}
-        </div>
-
-        <div className="card p-4">
-          <p className="text-xs text-claude-muted mb-2 font-medium">胜率</p>
-          <p className="text-2xl font-bold text-claude-text">
-            {monthlySummary.winRate !== null ? `${monthlySummary.winRate}%` : '—'}
-          </p>
-          <div className="flex items-center gap-2 mt-1">
-            <span className="text-xs font-medium" style={{ color: '#16a34a' }}>{monthlySummary.winDays} 盈</span>
-            <span className="text-xs text-claude-subtle">·</span>
-            <span className="text-xs font-medium" style={{ color: '#dc2626' }}>{monthlySummary.lossDays} 亏</span>
+              <p className="text-xs text-claude-muted mt-1">当前持仓</p>
+            </div>
           </div>
         </div>
 
-        <div className="card p-4">
-          <div className="flex items-center gap-1.5 mb-2">
-            <Trophy size={13} style={{ color: '#16a34a' }} />
-            <p className="text-xs text-claude-muted font-medium">最佳交易日</p>
-          </div>
-          {monthlySummary.bestDay ? (
-            <>
-              <p className="text-2xl font-bold" style={{ color: '#16a34a' }}>
-                {fmt.pnl(monthlySummary.bestDay.value)}
+        {/* YTD */}
+        <div className="card p-5">
+          <p className="text-[11px] font-semibold text-claude-muted uppercase tracking-wider mb-4">
+            年初至今 · {new Date().getFullYear()}
+          </p>
+          <div className="flex">
+            <div className="flex-1 pr-5">
+              <p className="text-xs text-claude-muted mb-1">总盈亏</p>
+              <p className={`text-2xl font-bold ${getPnLClass(ytdTotalPnL)}`}>
+                {ytdTotalPnL !== 0 ? fmt.pnl(ytdTotalPnL) : '—'}
               </p>
-              <p className="text-xs text-claude-muted mt-1">{month + 1}月{monthlySummary.bestDay.day}日</p>
-            </>
-          ) : (
-            <p className="text-2xl font-bold text-claude-subtle">—</p>
-          )}
+              <p className="text-xs text-claude-muted mt-1">已实现 + 未实现</p>
+            </div>
+            <div className="flex-1 px-5 border-l border-claude-border">
+              <p className="text-xs text-claude-muted mb-1">已实现</p>
+              <p className={`text-xl font-bold ${getPnLClass(ytdSummary)}`}>
+                {ytdSummary !== 0 ? fmt.pnl(ytdSummary) : '—'}
+              </p>
+              <p className="text-xs text-claude-muted mt-1">1 月 1 日起</p>
+            </div>
+            <div className="flex-1 pl-5 border-l border-claude-border">
+              <p className="text-xs text-claude-muted mb-1">未实现</p>
+              <p className={`text-xl font-bold ${getPnLClass(currentUnrealizedPnL)}`}>
+                {currentUnrealizedPnL !== 0 ? fmt.pnl(currentUnrealizedPnL) : '—'}
+              </p>
+              <p className="text-xs text-claude-muted mt-1">当前持仓</p>
+            </div>
+          </div>
         </div>
 
-        <div className="card p-4">
-          <div className="flex items-center gap-1.5 mb-2">
-            <AlertTriangle size={13} style={{ color: '#dc2626' }} />
-            <p className="text-xs text-claude-muted font-medium">最差交易日</p>
+        {/* Monthly */}
+        <div className="card p-5">
+          {/* Header row */}
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-[11px] font-semibold text-claude-muted uppercase tracking-wider">
+              {year} 年 {MONTHS[month]}
+            </p>
+            <div className="flex items-center gap-4 text-xs text-claude-muted">
+              {monthlySummary.winRate !== null && (
+                <span>
+                  胜率&nbsp;
+                  <span className="font-semibold text-claude-text">{monthlySummary.winRate}%</span>
+                  &nbsp;
+                  <span className="font-medium" style={{ color: '#16a34a' }}>{monthlySummary.winDays} 盈</span>
+                  &nbsp;·&nbsp;
+                  <span className="font-medium" style={{ color: '#dc2626' }}>{monthlySummary.lossDays} 亏</span>
+                </span>
+              )}
+              {monthlySummary.bestDay && (
+                <span className="flex items-center gap-1">
+                  <Trophy size={11} style={{ color: '#16a34a' }} />
+                  <span className="profit-text font-semibold">{compactPnL(monthlySummary.bestDay.value)}</span>
+                  <span className="text-claude-subtle">{month + 1}/{monthlySummary.bestDay.day}</span>
+                </span>
+              )}
+              {monthlySummary.worstDay && (
+                <span className="flex items-center gap-1">
+                  <AlertTriangle size={11} style={{ color: '#dc2626' }} />
+                  <span className="loss-text font-semibold">{compactPnL(monthlySummary.worstDay.value)}</span>
+                  <span className="text-claude-subtle">{month + 1}/{monthlySummary.worstDay.day}</span>
+                </span>
+              )}
+            </div>
           </div>
-          {monthlySummary.worstDay ? (
-            <>
-              <p className="text-2xl font-bold" style={{ color: '#dc2626' }}>
-                {fmt.pnl(monthlySummary.worstDay.value)}
+          {/* Metrics row */}
+          <div className="flex">
+            <div className="flex-1 pr-5">
+              <p className="text-xs text-claude-muted mb-1">月度总盈亏</p>
+              {histLoading && monthlyTotalPnL == null ? (
+                <p className="text-sm text-claude-muted animate-pulse">加载中…</p>
+              ) : (
+                <p className={`text-2xl font-bold ${getPnLClass(monthlyTotalPnL)}`}>
+                  {monthlyTotalPnL != null ? fmt.pnl(monthlyTotalPnL) : '—'}
+                </p>
+              )}
+              <p className="text-xs text-claude-muted mt-1">已实现 + 未实现变动</p>
+            </div>
+            <div className="flex-1 px-5 border-l border-claude-border">
+              <p className="text-xs text-claude-muted mb-1">已实现</p>
+              <p className={`text-xl font-bold ${getPnLClass(monthlySummary.totalRealized)}`}>
+                {monthlySummary.totalRealized !== 0 ? fmt.pnl(monthlySummary.totalRealized) : '—'}
               </p>
-              <p className="text-xs text-claude-muted mt-1">{month + 1}月{monthlySummary.worstDay.day}日</p>
-            </>
-          ) : (
-            <p className="text-2xl font-bold text-claude-subtle">—</p>
-          )}
+              <p className="text-xs text-claude-muted mt-1">{monthlySummary.tradingDays} 个有数据日</p>
+            </div>
+            <div className="flex-1 pl-5 border-l border-claude-border">
+              <p className="text-xs text-claude-muted mb-1">未实现变动</p>
+              {histLoading && monthlyUnrealizedPnL == null ? (
+                <p className="text-sm text-claude-muted animate-pulse">加载中…</p>
+              ) : (
+                <p className={`text-xl font-bold ${getPnLClass(monthlyUnrealizedPnL)}`}>
+                  {monthlyUnrealizedPnL != null ? fmt.pnl(monthlyUnrealizedPnL) : '—'}
+                </p>
+              )}
+              <p className="text-xs text-claude-muted mt-1">月末 − 月初浮盈</p>
+            </div>
+          </div>
         </div>
+
       </div>
 
       {/* Calendar grid */}
