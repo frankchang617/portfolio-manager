@@ -588,25 +588,38 @@ export default function Dashboard({ setActiveTab }) {
           <div className="h-40 flex items-center justify-center text-claude-muted text-sm">
             暂无足够数据显示走势图
           </div>
-        ) : (
-          <ResponsiveContainer width="100%" height={200}>
-            <AreaChart data={snapshotData}>
-              <defs>
-                <linearGradient id="valueGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15} />
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={cc.grid} vertical={false} />
-              <XAxis dataKey="label" tick={{ fontSize: 11, fill: cc.axis }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: cc.axis }} axisLine={false} tickLine={false}
-                tickFormatter={yTickFmt} width={72} />
-              <Tooltip content={<SnapshotTooltip />} />
-              <Area type="monotone" dataKey="totalValue" stroke="#3b82f6" strokeWidth={2}
-                fill="url(#valueGrad)" dot={false} activeDot={{ r: 4 }} />
-            </AreaChart>
-          </ResponsiveContainer>
-        )}
+        ) : (() => {
+          const values = snapshotData.map(d => d.totalValue).filter(v => v > 0)
+          const rawMin = Math.min(...values)
+          const rawMax = Math.max(...values)
+          const range = rawMax - rawMin || 1000
+          // Step rounded up to nearest $1K; cap so we get ≤ 20 ticks
+          const step = Math.max(1000, Math.ceil(range / 20 / 1000) * 1000)
+          const domainMin = Math.floor(rawMin / step) * step
+          const domainMax = Math.ceil(rawMax / step) * step
+          const ticks = []
+          for (let v = domainMin; v <= domainMax + step * 0.01; v += step) ticks.push(v)
+          return (
+            <ResponsiveContainer width="100%" height={320}>
+              <AreaChart data={snapshotData}>
+                <defs>
+                  <linearGradient id="valueGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke={cc.grid} vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: cc.axis }} axisLine={false} tickLine={false} />
+                <YAxis ticks={ticks} domain={[domainMin, domainMax]}
+                  tick={{ fontSize: 11, fill: cc.axis }} axisLine={false} tickLine={false}
+                  tickFormatter={yTickFmt} width={72} />
+                <Tooltip content={<SnapshotTooltip />} />
+                <Area type="monotone" dataKey="totalValue" stroke="#3b82f6" strokeWidth={2}
+                  fill="url(#valueGrad)" dot={false} activeDot={{ r: 4 }} />
+              </AreaChart>
+            </ResponsiveContainer>
+          )
+        })()}
       </div>
 
       {/* ── Portfolio P&L comparison chart ── */}
