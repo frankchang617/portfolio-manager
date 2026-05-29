@@ -124,13 +124,16 @@ export default function DailyPnLCalendar() {
     return [...years].sort((a, b) => b - a)
   }, [portfoliosToProcess, isAggregate, state.dailySnapshots, today])
 
-  // Realized P&L map: date => { realized, todayPnL }
+  // Realized P&L map: date => { realized, stockRealized, optionRealized, todayPnL }
   const dailyData = useMemo(() => {
     const map = {}
+    const init = (date) => {
+      if (!map[date]) map[date] = { realized: 0, stockRealized: 0, optionRealized: 0, todayPnL: 0 }
+    }
 
     if (isAggregate) {
       for (const s of (state.dailySnapshots ?? [])) {
-        if (!map[s.date]) map[s.date] = { realized: 0, todayPnL: 0 }
+        init(s.date)
         map[s.date].todayPnL = s.todayPnL ?? 0
       }
     }
@@ -139,15 +142,17 @@ export default function DailyPnLCalendar() {
       for (const s of (p.stocks ?? [])) {
         for (const t of (s.transactions ?? [])) {
           if (t.action === 'sell' && t.date && t.realizedPnL != null) {
-            if (!map[t.date]) map[t.date] = { realized: 0, todayPnL: 0 }
+            init(t.date)
             map[t.date].realized += t.realizedPnL
+            map[t.date].stockRealized += t.realizedPnL
           }
         }
       }
       for (const o of (p.options ?? [])) {
         if (o.status === 'closed' && o.closeDate && o.realizedPnL != null) {
-          if (!map[o.closeDate]) map[o.closeDate] = { realized: 0, todayPnL: 0 }
+          init(o.closeDate)
           map[o.closeDate].realized += o.realizedPnL
+          map[o.closeDate].optionRealized += o.realizedPnL
         }
       }
     }
@@ -571,11 +576,27 @@ export default function DailyPnLCalendar() {
                   {day}
                 </span>
 
-                {pnl !== null && (
-                  <span className={`text-[11px] font-bold leading-tight ${pnl > 0 ? 'profit-text' : 'loss-text'}`}>
-                    {compactPnL(pnl)}
-                  </span>
-                )}
+                {pnl !== null && (() => {
+                  const sr = data?.stockRealized ?? 0
+                  const or = data?.optionRealized ?? 0
+                  if (sr !== 0 && or !== 0) {
+                    return (
+                      <>
+                        <span className={`text-[10px] font-bold leading-none ${sr > 0 ? 'profit-text' : 'loss-text'}`}>
+                          股 {compactPnL(sr)}
+                        </span>
+                        <span className={`text-[10px] font-bold leading-none ${or > 0 ? 'profit-text' : 'loss-text'}`}>
+                          期 {compactPnL(or)}
+                        </span>
+                      </>
+                    )
+                  }
+                  return (
+                    <span className={`text-[11px] font-bold leading-tight ${pnl > 0 ? 'profit-text' : 'loss-text'}`}>
+                      {compactPnL(pnl)}
+                    </span>
+                  )
+                })()}
 
                 {/* Dot = unrealized-only (no realized trade that day) */}
                 {!isRealized && pnl !== null && (
@@ -609,14 +630,35 @@ export default function DailyPnLCalendar() {
                     </span>
                   </div>
                 )}
-                {realized !== 0 && (
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-claude-muted">已实现盈亏</span>
-                    <span className={`text-sm font-bold font-mono ${realized >= 0 ? 'profit-text' : 'loss-text'}`}>
-                      {fmt.pnl(realized)}
-                    </span>
-                  </div>
-                )}
+                {realized !== 0 && (() => {
+                  const sr = dayObj.data?.stockRealized ?? 0
+                  const or = dayObj.data?.optionRealized ?? 0
+                  const hasBoth = sr !== 0 && or !== 0
+                  if (hasBoth) return (
+                    <>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs text-claude-muted">股票已实现</span>
+                        <span className={`text-sm font-bold font-mono ${sr >= 0 ? 'profit-text' : 'loss-text'}`}>
+                          {fmt.pnl(sr)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs text-claude-muted">期权已实现</span>
+                        <span className={`text-sm font-bold font-mono ${or >= 0 ? 'profit-text' : 'loss-text'}`}>
+                          {fmt.pnl(or)}
+                        </span>
+                      </div>
+                    </>
+                  )
+                  return (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-claude-muted">{or !== 0 ? '期权已实现' : '股票已实现'}</span>
+                      <span className={`text-sm font-bold font-mono ${realized >= 0 ? 'profit-text' : 'loss-text'}`}>
+                        {fmt.pnl(realized)}
+                      </span>
+                    </div>
+                  )
+                })()}
                 {showBoth && (
                   <div className="flex items-center gap-1.5 pl-3 border-l border-claude-border">
                     <span className="text-xs text-claude-muted">当日合计</span>
