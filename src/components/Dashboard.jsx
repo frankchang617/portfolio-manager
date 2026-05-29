@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import { TrendingUp, TrendingDown } from 'lucide-react'
 import { useChartColors } from '../hooks/useDarkMode'
 import {
@@ -8,6 +8,47 @@ import {
 import { usePortfolio } from '../contexts/PortfolioContext'
 import { fmt, getPnLClass } from '../utils/formatters'
 import { calculateOptionMetrics } from '../utils/blackScholes'
+import { fetchHistoricalPrices } from '../utils/api'
+
+// ── Historical asset reconstruction helpers ──────────────────────────────────
+
+// Replay transactions up to (and including) targetDate for a single stock.
+function positionAtDate(stock, targetDate) {
+  let shares = stock.initialShares ?? 0
+  let totalCost = (stock.initialShares ?? 0) * (stock.initialAvgCost ?? 0)
+  const txns = (stock.transactions ?? [])
+    .filter(t => t.date && t.date <= targetDate)
+    .sort((a, b) => a.date.localeCompare(b.date))
+  for (const t of txns) {
+    if (t.action === 'buy') {
+      totalCost += t.price * t.shares + (t.commission ?? 0)
+      shares += t.shares
+    } else if (t.action === 'sell' && shares > 0) {
+      totalCost = (totalCost / shares) * (shares - t.shares)
+      shares -= t.shares
+    }
+  }
+  return { shares, avgCost: shares > 0 ? totalCost / shares : 0 }
+}
+
+// Compute cash balance at dateStr by reversing stock transactions that happened after dateStr.
+// Works backward from the known current portfolio.cash.
+function cashAtDate(portfolio, dateStr) {
+  let cash = portfolio.cash ?? 0
+  for (const s of portfolio.stocks ?? []) {
+    for (const t of s.transactions ?? []) {
+      if (!t.date || t.date <= dateStr) continue
+      if (t.action === 'buy') {
+        // Buy happened after dateStr → undo it: add back what was spent
+        cash += t.price * t.shares + (t.commission ?? 0)
+      } else if (t.action === 'sell') {
+        // Sell happened after dateStr → undo it: subtract what was received
+        cash -= t.price * t.shares - (t.commission ?? 0)
+      }
+    }
+  }
+  return Math.max(0, cash)
+}
 
 // ── Performance statistics helpers ──────────────────────────────────────────
 
@@ -330,6 +371,35 @@ export default function Dashboard({ setActiveTab }) {
 
   const riskFreeRate = state.settings.riskFreeRate
 
+  // Historical prices for asset-trend reconstruction
+  const [histPrices, setHistPrices] = useState({})
+  const [histLoading, setHistLoading] = useState(false)
+  const fetchedSymbols = useRef(new Set())
+
+  useEffect(() => {
+    const symbols = []
+    for (const p of state.portfolios.filter(p => !p.isAggregate)) {
+      for (const s of p.stocks ?? []) {
+        const sym = s.symbol.toUpperCase()
+        if (!fetchedSymbols.current.has(sym)) symbols.push(sym)
+      }
+    }
+    if (symbols.length === 0) return
+    setHistLoading(true)
+    Promise.allSettled(symbols.map(sym => fetchHistoricalPrices(sym, '5y').then(data => ({ sym, data }))))
+      .then(results => {
+        const updates = {}
+        for (const r of results) {
+          if (r.status === 'fulfilled') {
+            fetchedSymbols.current.add(r.value.sym)
+            updates[r.value.sym] = r.value.data
+          }
+        }
+        setHistPrices(prev => ({ ...prev, ...updates }))
+      })
+      .finally(() => setHistLoading(false))
+  }, [state.portfolios])
+
   const allMetrics = useMemo(() => (
     state.portfolios
       .filter(p => !p.isAggregate)
@@ -362,8 +432,56 @@ export default function Dashboard({ setActiveTab }) {
     }
   }, [allMetrics])
 
+  // Reconstruct daily total asset value from transactions + Yahoo Finance hist prices.
+  // Stock market value at date d = Σ(positionAtDate(stock, d).shares × price[d])
+  // Cash at date d = current cash reversed through all transactions after d.
+  const historicalAssetData = useMemo(() => {
+    if (Object.keys(histPrices).length === 0) return null
+    const allPortfolios = state.portfolios.filter(p => !p.isAggregate)
+    const todayStr = new Date().toISOString().split('T')[0]
+
+    // Find earliest transaction date across all portfolios
+    let earliest = null
+    for (const p of allPortfolios) {
+      for (const s of p.stocks ?? []) {
+        for (const t of s.transactions ?? []) {
+          if (t.date && (!earliest || t.date < earliest)) earliest = t.date
+        }
+      }
+    }
+    if (!earliest) return null
+
+    // Collect every trading date from histPrices within range
+    const allDates = new Set()
+    for (const prices of Object.values(histPrices)) {
+      for (const date of Object.keys(prices)) {
+        if (date >= earliest && date <= todayStr) allDates.add(date)
+      }
+    }
+    if (allDates.size === 0) return null
+
+    const sorted = [...allDates].sort()
+    const result = []
+    for (const dateStr of sorted) {
+      let totalValue = 0
+      for (const p of allPortfolios) {
+        for (const s of p.stocks ?? []) {
+          const sym = s.symbol.toUpperCase()
+          const price = histPrices[sym]?.[dateStr]
+          if (!price) continue
+          const { shares } = positionAtDate(s, dateStr)
+          if (shares > 0) totalValue += shares * price
+        }
+        totalValue += cashAtDate(p, dateStr)
+      }
+      if (totalValue > 0) result.push({ date: dateStr, totalValue })
+    }
+    return result.length >= 2 ? result : null
+  }, [state.portfolios, histPrices])
+
   const snapshotData = useMemo(() => {
-    const all = state.dailySnapshots ?? []
+    // Prefer reconstructed historical data; fall back to dailySnapshots
+    const baseData = historicalAssetData ?? (state.dailySnapshots ?? [])
     let cutoffStr = null
     if (timeRange === 'ytd') {
       cutoffStr = `${new Date().getFullYear()}-01-01`
@@ -372,8 +490,7 @@ export default function Dashboard({ setActiveTab }) {
       cutoff.setDate(cutoff.getDate() - parseInt(timeRange))
       cutoffStr = cutoff.toISOString().split('T')[0]
     }
-    const filtered = cutoffStr ? all.filter(s => s.date >= cutoffStr) : all
-    // Use year label when range spans more than 90 days
+    const filtered = cutoffStr ? baseData.filter(s => s.date >= cutoffStr) : baseData
     const spanDays = filtered.length > 1
       ? (new Date(filtered.at(-1).date) - new Date(filtered[0].date)) / 86400000
       : 0
@@ -385,7 +502,7 @@ export default function Dashboard({ setActiveTab }) {
           : { month: 'short', day: 'numeric' }
       ),
     }))
-  }, [state.dailySnapshots, timeRange])
+  }, [historicalAssetData, state.dailySnapshots, timeRange])
 
   const chartData = useMemo(() => (
     allMetrics.map(({ portfolio, metrics }) => ({
@@ -463,9 +580,13 @@ export default function Dashboard({ setActiveTab }) {
             ))}
           </div>
         </div>
-        {snapshotData.length < 2 ? (
+        {histLoading ? (
+          <div className="h-40 flex items-center justify-center text-claude-muted text-sm animate-pulse">
+            加载历史价格数据中…
+          </div>
+        ) : snapshotData.length < 2 ? (
           <div className="h-40 flex items-center justify-center text-claude-muted text-sm">
-            价格刷新后开始记录，积累 2 天以上数据后显示走势图
+            暂无足够数据显示走势图
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={200}>
