@@ -204,13 +204,18 @@ export default function DailyPnLCalendar() {
     return snaps[snaps.length - 1].unrealizedPnL ?? null
   }, [portfoliosToProcess, histPrices, year, month, todayStr, isAggregate, state.dailySnapshots])
 
-  // Yearly realized P&L for the currently viewed year
-  const yearlySummary = useMemo(() => {
-    const prefix = `${year}-`
-    return Object.entries(dailyData)
-      .filter(([d]) => d.startsWith(prefix))
-      .reduce((sum, [, v]) => sum + (v.realized ?? 0), 0)
-  }, [dailyData, year])
+  // Live unrealized P&L across all current holdings (used for YTD unrealized card)
+  const currentUnrealizedPnL = useMemo(() => {
+    let total = 0
+    for (const p of portfoliosToProcess) {
+      for (const s of p.stocks ?? []) {
+        if (s.shares <= 0) continue
+        const q = state.prices[s.symbol.toUpperCase()]
+        if (q?.price != null) total += (q.price - s.avgCost) * s.shares
+      }
+    }
+    return total
+  }, [portfoliosToProcess, state.prices])
 
   // YTD realized P&L: Jan 1 of current real year → today
   const ytdSummary = useMemo(() => {
@@ -252,6 +257,12 @@ export default function DailyPnLCalendar() {
     return { totalRealized, totalTodayPnL, winDays, lossDays, winRate, bestDay, worstDay: displayWorstDay, tradingDays }
   }, [calendarDays])
 
+  // Monthly total P&L = unrealized (end-of-month snapshot) + realized in month
+  const monthlyTotalPnL = useMemo(() => {
+    if (monthlyUnrealizedPnL == null) return monthlySummary.totalRealized || null
+    return monthlyUnrealizedPnL + monthlySummary.totalRealized
+  }, [monthlyUnrealizedPnL, monthlySummary.totalRealized])
+
   const prevMonth = () => {
     if (month === 0) { setMonth(11); setYear(y => y - 1) }
     else setMonth(m => m - 1)
@@ -261,22 +272,25 @@ export default function DailyPnLCalendar() {
     else setMonth(m => m + 1)
   }
 
-  // Map pnl magnitude to background color
-  function getCellBg(data) {
-    if (!data) return null
-    const pnl = data.realized !== 0 ? data.realized : data.todayPnL
-    if (pnl === 0) return null
-    const abs = Math.abs(pnl)
+  // Map pnl magnitude to background color; realized days = green/red, unrealized-only = blue tint
+  function getCellBg(totalPnl, isRealized) {
+    if (totalPnl == null || totalPnl === 0) return null
+    const abs = Math.abs(totalPnl)
     const intensity = Math.min(abs / 2000, 1)
-    const alpha = Math.round((0.12 + intensity * 0.55) * 255).toString(16).padStart(2, '0')
-    return pnl > 0 ? `#16a34a${alpha}` : `#dc2626${alpha}`
+    if (isRealized) {
+      const alpha = Math.round((0.12 + intensity * 0.55) * 255).toString(16).padStart(2, '0')
+      return totalPnl > 0 ? `#16a34a${alpha}` : `#dc2626${alpha}`
+    }
+    const alpha = Math.round((0.06 + intensity * 0.22) * 255).toString(16).padStart(2, '0')
+    return totalPnl > 0 ? `#3b82f6${alpha}` : `#ef4444${alpha}`
   }
 
   function getPnlDisplay(data, histUnrealized) {
-    if (data?.realized !== 0 && data?.realized != null) return { pnl: data.realized, isRealized: true }
-    if (histUnrealized != null && histUnrealized !== 0) return { pnl: histUnrealized, isRealized: false }
-    if (data?.todayPnL !== 0 && data?.todayPnL != null) return { pnl: data.todayPnL, isRealized: false }
-    return { pnl: null, isRealized: false }
+    const realized = data?.realized ?? 0
+    const unrealized = histUnrealized != null ? histUnrealized : (data?.todayPnL ?? 0)
+    const total = realized + unrealized
+    const hasData = realized !== 0 || unrealized !== 0
+    return { pnl: hasData ? total : null, isRealized: realized !== 0, realized, unrealized }
   }
 
   const hoveredData = hoveredDate ? dailyData[hoveredDate] : null
@@ -331,17 +345,8 @@ export default function DailyPnLCalendar() {
         </div>
       </div>
 
-      {/* Yearly / YTD summary bar */}
+      {/* YTD summary bar */}
       <div className="grid grid-cols-2 gap-4">
-        <div className="card p-4 flex items-center justify-between">
-          <div>
-            <p className="text-xs text-claude-muted font-medium mb-1">{year} 年已实现盈亏</p>
-            <p className={`text-2xl font-bold ${getPnLClass(yearlySummary)}`}>
-              {yearlySummary !== 0 ? fmt.pnl(yearlySummary) : '—'}
-            </p>
-          </div>
-          <span className="text-3xl opacity-20">📅</span>
-        </div>
         <div className="card p-4 flex items-center justify-between">
           <div>
             <p className="text-xs text-claude-muted font-medium mb-1">年初至今（YTD）已实现盈亏</p>
@@ -350,12 +355,22 @@ export default function DailyPnLCalendar() {
             </p>
             <p className="text-xs text-claude-muted mt-1">{new Date().getFullYear()} 年 1 月 1 日至今</p>
           </div>
+          <span className="text-3xl opacity-20">📅</span>
+        </div>
+        <div className="card p-4 flex items-center justify-between">
+          <div>
+            <p className="text-xs text-claude-muted font-medium mb-1">年初至今未实现盈亏</p>
+            <p className={`text-2xl font-bold ${getPnLClass(currentUnrealizedPnL)}`}>
+              {currentUnrealizedPnL !== 0 ? fmt.pnl(currentUnrealizedPnL) : '—'}
+            </p>
+            <p className="text-xs text-claude-muted mt-1">当前持仓实时浮盈</p>
+          </div>
           <span className="text-3xl opacity-20">📈</span>
         </div>
       </div>
 
       {/* Monthly summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
         <div className="card p-4">
           <p className="text-xs text-claude-muted mb-2 font-medium">月度已实现盈亏</p>
           <p className={`text-2xl font-bold ${getPnLClass(monthlySummary.totalRealized)}`}>
@@ -365,7 +380,7 @@ export default function DailyPnLCalendar() {
         </div>
 
         <div className="card p-4">
-          <p className="text-xs text-claude-muted mb-2 font-medium">月末未实现盈亏</p>
+          <p className="text-xs text-claude-muted mb-2 font-medium">月度未实现盈亏</p>
           {histLoading && monthlyUnrealizedPnL == null ? (
             <p className="text-sm text-claude-muted animate-pulse">加载历史价格中…</p>
           ) : (
@@ -376,6 +391,20 @@ export default function DailyPnLCalendar() {
               <p className="text-xs text-claude-muted mt-1">
                 {monthlyUnrealizedPnL != null ? '月末最后交易日收盘价' : '暂无历史价格'}
               </p>
+            </>
+          )}
+        </div>
+
+        <div className="card p-4">
+          <p className="text-xs text-claude-muted mb-2 font-medium">月度总盈亏</p>
+          {histLoading && monthlyTotalPnL == null ? (
+            <p className="text-sm text-claude-muted animate-pulse">加载中…</p>
+          ) : (
+            <>
+              <p className={`text-2xl font-bold ${getPnLClass(monthlyTotalPnL)}`}>
+                {monthlyTotalPnL != null ? fmt.pnl(monthlyTotalPnL) : '—'}
+              </p>
+              <p className="text-xs text-claude-muted mt-1">未实现 + 已实现</p>
             </>
           )}
         </div>
@@ -446,17 +475,8 @@ export default function DailyPnLCalendar() {
             if (!dayObj) return <div key={`pad-${i}`} />
 
             const { day, dateStr, data, histUnrealized } = dayObj
-            const { pnl, isRealized } = getPnlDisplay(data, histUnrealized)
-            const bg = getCellBg(data) ?? (
-              histUnrealized != null && histUnrealized !== 0
-                ? (() => {
-                    const abs = Math.abs(histUnrealized)
-                    const intensity = Math.min(abs / 5000, 1)
-                    const alpha = Math.round((0.06 + intensity * 0.22) * 255).toString(16).padStart(2, '0')
-                    return histUnrealized > 0 ? `#3b82f6${alpha}` : `#ef4444${alpha}`
-                  })()
-                : null
-            )
+            const { pnl, isRealized, realized, unrealized } = getPnlDisplay(data, histUnrealized)
+            const bg = getCellBg(pnl, isRealized)
             const isToday = dateStr === todayStr
             const isFuture = dateStr > todayStr
             const dow = new Date(dateStr + 'T00:00:00').getDay()
@@ -469,11 +489,9 @@ export default function DailyPnLCalendar() {
                 className={`relative rounded-xl flex flex-col items-center justify-center py-2 px-1 min-h-[64px] transition-all duration-150 cursor-default
                   ${isToday ? 'ring-2 ring-blue-500 ring-offset-1' : ''}
                   ${isFuture ? 'opacity-30' : ''}
-                  ${!data ? 'hover:bg-gray-50' : 'hover:brightness-95'}
+                  ${pnl == null ? 'hover:bg-gray-50' : 'hover:brightness-95'}
                 `}
-                style={{
-                  backgroundColor: bg || undefined,
-                }}
+                style={{ backgroundColor: bg || undefined }}
               >
                 <span className={`text-sm font-semibold leading-none mb-1 ${
                   isToday
@@ -482,7 +500,7 @@ export default function DailyPnLCalendar() {
                     ? 'text-red-500'
                     : dow === 6
                     ? 'text-blue-500'
-                    : data && pnl !== null
+                    : pnl !== null
                     ? pnl > 0 ? 'profit-text' : 'loss-text'
                     : 'text-claude-text'
                 }`}>
@@ -497,10 +515,10 @@ export default function DailyPnLCalendar() {
                   </span>
                 )}
 
-                {/* Dot for market-only days (no realized, but has todayPnL) */}
-                {data && !isRealized && pnl !== null && (
+                {/* Dot for unrealized-only days */}
+                {!isRealized && pnl !== null && (
                   <span className={`absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full ${
-                    pnl > 0 ? 'bg-green-500/60' : 'bg-red-500/60'
+                    pnl > 0 ? 'bg-blue-400/70' : 'bg-red-400/70'
                   }`} />
                 )}
               </div>
@@ -509,43 +527,46 @@ export default function DailyPnLCalendar() {
         </div>
 
         {/* Hover detail */}
-        {hoveredDate && (hoveredData || calendarDays.find(d => d?.dateStr === hoveredDate)?.histUnrealized != null) && (
-          <div className="mt-4 pt-4 border-t border-claude-border">
-            <div className="flex items-center gap-6 flex-wrap">
-              <span className="text-sm font-medium text-claude-text">
-                {new Date(hoveredDate + 'T00:00:00').toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })}
-              </span>
-              {hoveredData?.realized !== 0 && hoveredData?.realized != null && (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-claude-muted">已实现盈亏</span>
-                  <span className={`text-sm font-bold font-mono ${hoveredData.realized >= 0 ? 'profit-text' : 'loss-text'}`}>
-                    {fmt.pnl(hoveredData.realized)}
-                  </span>
-                </div>
-              )}
-              {(() => {
-                const dayObj = calendarDays.find(d => d?.dateStr === hoveredDate)
-                const hu = dayObj?.histUnrealized
-                if (hu != null && hu !== 0) return (
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-claude-muted">持仓未实现盈亏</span>
-                    <span className={`text-sm font-bold font-mono ${hu >= 0 ? 'text-blue-500' : 'text-loss'}`}>
-                      {fmt.pnl(hu)}
-                    </span>
-                  </div>
-                )
-                if (hoveredData?.todayPnL !== 0 && hoveredData?.todayPnL != null) return (
+        {hoveredDate && (() => {
+          const dayObj = calendarDays.find(d => d?.dateStr === hoveredDate)
+          if (!dayObj) return null
+          const { pnl, isRealized, realized, unrealized } = getPnlDisplay(dayObj.data, dayObj.histUnrealized)
+          if (pnl == null) return null
+          const showBoth = realized !== 0 && unrealized !== 0
+          return (
+            <div className="mt-4 pt-4 border-t border-claude-border">
+              <div className="flex items-center gap-6 flex-wrap">
+                <span className="text-sm font-medium text-claude-text">
+                  {new Date(hoveredDate + 'T00:00:00').toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })}
+                </span>
+                {unrealized !== 0 && (
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs text-claude-muted">未实现盈亏</span>
-                    <span className={`text-sm font-bold font-mono ${hoveredData.todayPnL >= 0 ? 'profit-text' : 'loss-text'}`}>
-                      {fmt.pnl(hoveredData.todayPnL)}
+                    <span className={`text-sm font-bold font-mono ${unrealized >= 0 ? 'text-blue-500' : 'loss-text'}`}>
+                      {fmt.pnl(unrealized)}
                     </span>
                   </div>
-                )
-              })()}
+                )}
+                {realized !== 0 && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-claude-muted">已实现盈亏</span>
+                    <span className={`text-sm font-bold font-mono ${realized >= 0 ? 'profit-text' : 'loss-text'}`}>
+                      {fmt.pnl(realized)}
+                    </span>
+                  </div>
+                )}
+                {showBoth && (
+                  <div className="flex items-center gap-1.5 pl-3 border-l border-claude-border">
+                    <span className="text-xs text-claude-muted">合计</span>
+                    <span className={`text-sm font-bold font-mono ${pnl >= 0 ? 'profit-text' : 'loss-text'}`}>
+                      {fmt.pnl(pnl)}
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
 
         {/* Legend */}
         <div className="flex items-center gap-5 mt-4 pt-4 border-t border-claude-border flex-wrap">
@@ -567,8 +588,8 @@ export default function DailyPnLCalendar() {
             <span className="text-xs text-claude-muted">历史持仓未实现盈亏（亏）</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-1.5 h-1.5 rounded-full bg-green-500/60" />
-            <span className="text-xs text-claude-muted">仅有市值变动数据</span>
+            <div className="w-1.5 h-1.5 rounded-full bg-blue-400/70" />
+            <span className="text-xs text-claude-muted">仅未实现盈亏（无已实现交易）</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full ring-2 ring-blue-500" />
