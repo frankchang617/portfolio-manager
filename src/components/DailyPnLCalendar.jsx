@@ -44,6 +44,61 @@ function getUnrealizedAtDate(portfolios, histPrices, dateStr) {
   return hasData ? total : null
 }
 
+// Most recent trading-day close strictly before dateStr (scan back up to 10 days).
+function prevClose(histPrices, sym, dateStr) {
+  const series = histPrices[sym]
+  if (!series) return null
+  for (let back = 1; back <= 10; back++) {
+    const d = offsetDate(dateStr, -back)
+    if (series[d] != null) return series[d]
+  }
+  return null
+}
+
+// Close price on dateStr. For today, use the live price (histPrices excludes today).
+function closeOn(histPrices, livePrices, sym, dateStr, todayStr) {
+  if (dateStr === todayStr) {
+    const p = livePrices[sym]?.price
+    if (p != null) return p
+  }
+  return histPrices[sym]?.[dateStr] ?? null
+}
+
+// Mark-to-market daily P&L for stocks on dateStr — only the profit attributable to
+// THAT day's price action (not lifetime realized). Reconciles: summing over all days
+// = realized + unrealized change. Formula per stock (equity-change form):
+//   sharesAtOpen × (close − prevClose)         // overnight holdings (incl. shares sold today)
+//   + Σ buys  n × (close − buyPrice)           // bought today
+//   + Σ sells n × (sellPrice − close)          // sold today (adjusts the overnight term)
+// Returns null when no held/traded symbol has usable price data that day.
+function getStockDailyPnL(portfolios, histPrices, livePrices, dateStr, todayStr) {
+  let total = 0
+  let hasData = false
+  const prevDay = offsetDate(dateStr, -1)
+  for (const p of portfolios) {
+    for (const stock of p.stocks ?? []) {
+      const sym = stock.symbol.toUpperCase()
+      const cToday = closeOn(histPrices, livePrices, sym, dateStr, todayStr)
+      const cPrev = prevClose(histPrices, sym, dateStr)
+      const sharesOpen = positionAtDate(stock, prevDay).shares
+      const todayTxns = (stock.transactions ?? []).filter(t => t.date === dateStr)
+
+      // Overnight holdings (these include shares that get sold today)
+      if (sharesOpen > 0 && cToday != null && cPrev != null) {
+        total += sharesOpen * (cToday - cPrev); hasData = true
+      }
+      for (const t of todayTxns) {
+        if (t.action === 'buy' && cToday != null) {
+          total += t.shares * (cToday - t.price); hasData = true
+        } else if (t.action === 'sell' && cToday != null) {
+          total += t.shares * (t.price - cToday); hasData = true
+        }
+      }
+    }
+  }
+  return hasData ? total : null
+}
+
 const MONTHS = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月']
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六']
 
@@ -174,64 +229,26 @@ export default function DailyPnLCalendar() {
     return total
   }, [portfoliosToProcess, state.prices])
 
-  // Calendar days with daily unrealized CHANGE (not cumulative snapshot).
-  // Daily change = unrealized[d] - unrealized[previous trading day].
-  // For today: currentUnrealizedPnL - unrealized[yesterday].
+  // Calendar days with mark-to-market daily P&L (stocks).
+  // Each day shows only the profit attributable to THAT day's price action,
+  // not lifetime realized. Today uses live prices (handled inside getStockDailyPnL).
   const calendarDays = useMemo(() => {
     const mm = String(month + 1).padStart(2, '0')
     const daysInMonth = new Date(year, month + 1, 0).getDate()
     const startDow = new Date(year, month, 1).getDay()
-
-    // Cache getUnrealizedAtDate calls to avoid redundant computation
-    const cache = {}
-    const getUnrealized = (dateStr) => {
-      if (dateStr > todayStr) return null
-      if (!(dateStr in cache)) {
-        cache[dateStr] = getUnrealizedAtDate(portfoliosToProcess, histPrices, dateStr)
-      }
-      return cache[dateStr]
-    }
-
-    // Find the most recent trading day before dateStr that has price data
-    const getPrevSnapshot = (dateStr) => {
-      for (let back = 1; back <= 7; back++) {
-        const s = offsetDate(dateStr, -back)
-        if (s > todayStr) continue
-        const val = getUnrealized(s)
-        if (val != null) return val
-      }
-      return null
-    }
 
     const days = []
     for (let i = 0; i < startDow; i++) days.push(null)
 
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${year}-${mm}-${String(d).padStart(2, '0')}`
-      let dailyUnrealizedChange = null
-
-      if (dateStr < todayStr) {
-        const snapshot = getUnrealized(dateStr)
-        if (snapshot != null) {
-          const prev = getPrevSnapshot(dateStr)
-          // prev == null means first trading day ever; treat prior as 0
-          dailyUnrealizedChange = snapshot - (prev ?? 0)
-        }
-      } else if (dateStr === todayStr) {
-        // Use live prices vs last historical close
-        const prev = getPrevSnapshot(todayStr)
-        if (prev != null) {
-          dailyUnrealizedChange = currentUnrealizedPnL - prev
-        } else if (currentUnrealizedPnL !== 0) {
-          // No prior history yet; show live cumulative as baseline
-          dailyUnrealizedChange = currentUnrealizedPnL
-        }
-      }
-
-      days.push({ day: d, dateStr, data: dailyData[dateStr] || null, dailyUnrealizedChange })
+      const stockDailyPnL = dateStr > todayStr
+        ? null
+        : getStockDailyPnL(portfoliosToProcess, histPrices, state.prices, dateStr, todayStr)
+      days.push({ day: d, dateStr, data: dailyData[dateStr] || null, stockDailyPnL })
     }
     return days
-  }, [year, month, dailyData, portfoliosToProcess, histPrices, todayStr, currentUnrealizedPnL])
+  }, [year, month, dailyData, portfoliosToProcess, histPrices, state.prices, todayStr])
 
   // Monthly unrealized P&L = CHANGE during the month (end-of-month snapshot - start-of-month snapshot).
   const monthlyUnrealizedPnL = useMemo(() => {
@@ -275,8 +292,23 @@ export default function DailyPnLCalendar() {
       .reduce((sum, [, v]) => sum + (v.realized ?? 0), 0)
   }, [dailyData, todayStr])
 
-  // YTD total = YTD realized + current unrealized
-  const ytdTotalPnL = useMemo(() => ytdSummary + currentUnrealizedPnL, [ytdSummary, currentUnrealizedPnL])
+  // YTD unrealized CHANGE = current unrealized − unrealized at start of this year.
+  // (Old behavior used full current unrealized, which overstated YTD by including
+  //  paper gains accrued on positions held from before this year.)
+  const ytdUnrealizedChange = useMemo(() => {
+    const curYear = new Date().getFullYear()
+    let startUnrealized = 0  // no position before this year → 0
+    for (let back = 0; back <= 10; back++) {
+      // Dec 31 of previous year, then walk back to last trading day with data
+      const d = offsetDate(`${curYear}-01-01`, -1 - back)
+      const val = getUnrealizedAtDate(portfoliosToProcess, histPrices, d)
+      if (val != null) { startUnrealized = val; break }
+    }
+    return currentUnrealizedPnL - startUnrealized
+  }, [portfoliosToProcess, histPrices, currentUnrealizedPnL])
+
+  // YTD total = YTD realized + YTD unrealized change
+  const ytdTotalPnL = useMemo(() => ytdSummary + ytdUnrealizedChange, [ytdSummary, ytdUnrealizedChange])
 
   // All-time total P&L
   const totalPnL = useMemo(() => totalRealizedPnL + currentUnrealizedPnL, [totalRealizedPnL, currentUnrealizedPnL])
@@ -292,8 +324,11 @@ export default function DailyPnLCalendar() {
     for (const dayObj of calendarDays) {
       if (!dayObj) continue
       const realized = dayObj.data?.realized ?? 0
-      const unrealized = dayObj.dailyUnrealizedChange ?? 0
-      const dayPnl = realized + unrealized
+      // Daily performance = stock mark-to-market (already includes stock realized
+      // contribution) + option realized lump (no daily option prices available).
+      const stockDaily = dayObj.stockDailyPnL ?? 0
+      const optionRealized = dayObj.data?.optionRealized ?? 0
+      const dayPnl = stockDaily + optionRealized
 
       if (realized !== 0) totalRealized += realized
       if (dayPnl === 0) continue
@@ -326,26 +361,23 @@ export default function DailyPnLCalendar() {
     else setMonth(m => m + 1)
   }
 
-  // Background color: realized days = green/red; unrealized-only = blue tint
-  function getCellBg(totalPnl, isRealized) {
-    if (totalPnl == null || totalPnl === 0) return null
-    const abs = Math.abs(totalPnl)
+  // Background color: green/red by daily P&L sign, intensity by magnitude.
+  function getCellBg(pnl) {
+    if (pnl == null || pnl === 0) return null
+    const abs = Math.abs(pnl)
     const intensity = Math.min(abs / 2000, 1)
-    if (isRealized) {
-      const alpha = Math.round((0.12 + intensity * 0.55) * 255).toString(16).padStart(2, '0')
-      return totalPnl > 0 ? `#16a34a${alpha}` : `#dc2626${alpha}`
-    }
-    const alpha = Math.round((0.06 + intensity * 0.22) * 255).toString(16).padStart(2, '0')
-    return totalPnl > 0 ? `#3b82f6${alpha}` : `#ef4444${alpha}`
+    const alpha = Math.round((0.10 + intensity * 0.5) * 255).toString(16).padStart(2, '0')
+    return pnl > 0 ? `#16a34a${alpha}` : `#dc2626${alpha}`
   }
 
-  // Daily display: realized + daily unrealized change
-  function getPnlDisplay(data, dailyUnrealizedChange) {
-    const realized = data?.realized ?? 0
-    const unrealized = dailyUnrealizedChange ?? 0
-    const total = realized + unrealized
-    const hasData = realized !== 0 || unrealized !== 0
-    return { pnl: hasData ? total : null, isRealized: realized !== 0, realized, unrealized }
+  // Daily display: stock mark-to-market (that day's price action) + option realized lump.
+  function getPnlDisplay(data, stockDailyPnL) {
+    const stockDaily = stockDailyPnL  // null or number
+    const optionRealized = data?.optionRealized ?? 0
+    const total = (stockDaily ?? 0) + optionRealized
+    const hasData = stockDaily != null || optionRealized !== 0
+    const hadRealizedTrade = (data?.stockRealized ?? 0) !== 0 || optionRealized !== 0
+    return { pnl: hasData ? total : null, stockDaily, optionRealized, hadRealizedTrade, realized: data?.realized ?? 0 }
   }
 
   return (
@@ -443,14 +475,14 @@ export default function DailyPnLCalendar() {
               <p className={`text-xl font-bold ${getPnLClass(ytdSummary)}`}>
                 {ytdSummary !== 0 ? fmt.pnl(ytdSummary) : '—'}
               </p>
-              <p className="text-xs text-claude-muted mt-1">1 月 1 日起</p>
+              <p className="text-xs text-claude-muted mt-1">1 月 1 日起落袋</p>
             </div>
             <div className="flex-1 pl-5 border-l border-claude-border">
-              <p className="text-xs text-claude-muted mb-1">未实现</p>
-              <p className={`text-xl font-bold ${getPnLClass(currentUnrealizedPnL)}`}>
-                {currentUnrealizedPnL !== 0 ? fmt.pnl(currentUnrealizedPnL) : '—'}
+              <p className="text-xs text-claude-muted mb-1">未实现变动</p>
+              <p className={`text-xl font-bold ${getPnLClass(ytdUnrealizedChange)}`}>
+                {ytdUnrealizedChange !== 0 ? fmt.pnl(ytdUnrealizedChange) : '—'}
               </p>
-              <p className="text-xs text-claude-muted mt-1">当前持仓</p>
+              <p className="text-xs text-claude-muted mt-1">较年初浮盈</p>
             </div>
           </div>
         </div>
@@ -541,9 +573,9 @@ export default function DailyPnLCalendar() {
           {calendarDays.map((dayObj, i) => {
             if (!dayObj) return <div key={`pad-${i}`} />
 
-            const { day, dateStr, data, dailyUnrealizedChange } = dayObj
-            const { pnl, isRealized, realized, unrealized } = getPnlDisplay(data, dailyUnrealizedChange)
-            const bg = getCellBg(pnl, isRealized)
+            const { day, dateStr, data, stockDailyPnL } = dayObj
+            const { pnl, stockDaily, optionRealized, hadRealizedTrade } = getPnlDisplay(data, stockDailyPnL)
+            const bg = getCellBg(pnl)
             const isToday = dateStr === todayStr
             const isFuture = dateStr > todayStr
             const dow = new Date(dateStr + 'T00:00:00').getDay()
@@ -571,16 +603,15 @@ export default function DailyPnLCalendar() {
                 </span>
 
                 {pnl !== null && (() => {
-                  const sr = data?.stockRealized ?? 0
-                  const or = data?.optionRealized ?? 0
-                  if (sr !== 0 && or !== 0) {
+                  // Two lines when both a stock daily move and an option close exist that day
+                  if (stockDaily != null && stockDaily !== 0 && optionRealized !== 0) {
                     return (
                       <>
-                        <span className={`text-[10px] font-bold leading-none ${sr > 0 ? 'profit-text' : 'loss-text'}`}>
-                          股 {compactPnL(sr)}
+                        <span className={`text-[10px] font-bold leading-none ${stockDaily > 0 ? 'profit-text' : 'loss-text'}`}>
+                          股 {compactPnL(stockDaily)}
                         </span>
-                        <span className={`text-[10px] font-bold leading-none ${or > 0 ? 'profit-text' : 'loss-text'}`}>
-                          期 {compactPnL(or)}
+                        <span className={`text-[10px] font-bold leading-none ${optionRealized > 0 ? 'profit-text' : 'loss-text'}`}>
+                          期 {compactPnL(optionRealized)}
                         </span>
                       </>
                     )
@@ -592,11 +623,9 @@ export default function DailyPnLCalendar() {
                   )
                 })()}
 
-                {/* Dot = unrealized-only (no realized trade that day) */}
-                {!isRealized && pnl !== null && (
-                  <span className={`absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full ${
-                    pnl > 0 ? 'bg-blue-400/70' : 'bg-red-400/70'
-                  }`} />
+                {/* Dot = a position was closed (realized) that day */}
+                {hadRealizedTrade && pnl !== null && (
+                  <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-amber-400 ring-1 ring-amber-500/40" />
                 )}
               </div>
             )
@@ -607,57 +636,43 @@ export default function DailyPnLCalendar() {
         {hoveredDate && (() => {
           const dayObj = calendarDays.find(d => d?.dateStr === hoveredDate)
           if (!dayObj) return null
-          const { pnl, isRealized, realized, unrealized } = getPnlDisplay(dayObj.data, dayObj.dailyUnrealizedChange)
+          const { pnl, stockDaily, optionRealized } = getPnlDisplay(dayObj.data, dayObj.stockDailyPnL)
           if (pnl == null) return null
-          const showBoth = realized !== 0 && unrealized !== 0
+          const sr = dayObj.data?.stockRealized ?? 0
+          const realizedTotal = sr + optionRealized  // 落袋(已实现) that day
           return (
             <div className="mt-4 pt-4 border-t border-claude-border">
               <div className="flex items-center gap-6 flex-wrap">
                 <span className="text-sm font-medium text-claude-text">
                   {new Date(hoveredDate + 'T00:00:00').toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })}
                 </span>
-                {unrealized !== 0 && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-claude-muted">当日盈亏</span>
+                  <span className={`text-sm font-bold font-mono ${pnl >= 0 ? 'profit-text' : 'loss-text'}`}>
+                    {fmt.pnl(pnl)}
+                  </span>
+                </div>
+                {stockDaily != null && stockDaily !== 0 && (
                   <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-claude-muted">未实现变动</span>
-                    <span className={`text-sm font-bold font-mono ${unrealized >= 0 ? 'text-blue-500' : 'loss-text'}`}>
-                      {fmt.pnl(unrealized)}
+                    <span className="text-xs text-claude-muted">股票当日变动</span>
+                    <span className={`text-sm font-bold font-mono ${stockDaily >= 0 ? 'profit-text' : 'loss-text'}`}>
+                      {fmt.pnl(stockDaily)}
                     </span>
                   </div>
                 )}
-                {realized !== 0 && (() => {
-                  const sr = dayObj.data?.stockRealized ?? 0
-                  const or = dayObj.data?.optionRealized ?? 0
-                  const hasBoth = sr !== 0 && or !== 0
-                  if (hasBoth) return (
-                    <>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs text-claude-muted">股票已实现</span>
-                        <span className={`text-sm font-bold font-mono ${sr >= 0 ? 'profit-text' : 'loss-text'}`}>
-                          {fmt.pnl(sr)}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs text-claude-muted">期权已实现</span>
-                        <span className={`text-sm font-bold font-mono ${or >= 0 ? 'profit-text' : 'loss-text'}`}>
-                          {fmt.pnl(or)}
-                        </span>
-                      </div>
-                    </>
-                  )
-                  return (
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs text-claude-muted">{or !== 0 ? '期权已实现' : '股票已实现'}</span>
-                      <span className={`text-sm font-bold font-mono ${realized >= 0 ? 'profit-text' : 'loss-text'}`}>
-                        {fmt.pnl(realized)}
-                      </span>
-                    </div>
-                  )
-                })()}
-                {showBoth && (
+                {optionRealized !== 0 && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-claude-muted">期权已实现</span>
+                    <span className={`text-sm font-bold font-mono ${optionRealized >= 0 ? 'profit-text' : 'loss-text'}`}>
+                      {fmt.pnl(optionRealized)}
+                    </span>
+                  </div>
+                )}
+                {realizedTotal !== 0 && (
                   <div className="flex items-center gap-1.5 pl-3 border-l border-claude-border">
-                    <span className="text-xs text-claude-muted">当日合计</span>
-                    <span className={`text-sm font-bold font-mono ${pnl >= 0 ? 'profit-text' : 'loss-text'}`}>
-                      {fmt.pnl(pnl)}
+                    <span className="text-xs text-claude-muted">当日落袋（已实现）</span>
+                    <span className={`text-sm font-bold font-mono ${realizedTotal >= 0 ? 'profit-text' : 'loss-text'}`}>
+                      {fmt.pnl(realizedTotal)}
                     </span>
                   </div>
                 )}
@@ -671,23 +686,18 @@ export default function DailyPnLCalendar() {
           <span className="text-xs text-claude-muted font-medium">图例：</span>
           <div className="flex items-center gap-1.5">
             <div className="w-4 h-4 rounded-lg" style={{ backgroundColor: '#16a34a55' }} />
-            <span className="text-xs text-claude-muted">当日盈利（含已实现）</span>
+            <span className="text-xs text-claude-muted">当日盈利</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="w-4 h-4 rounded-lg" style={{ backgroundColor: '#dc262655' }} />
-            <span className="text-xs text-claude-muted">当日亏损（含已实现）</span>
+            <span className="text-xs text-claude-muted">当日亏损</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-4 h-4 rounded-lg" style={{ backgroundColor: '#3b82f622' }} />
-            <span className="text-xs text-claude-muted">仅浮盈变动（盈）</span>
+            <div className="w-1.5 h-1.5 rounded-full bg-amber-400 ring-1 ring-amber-500/40" />
+            <span className="text-xs text-claude-muted">当日有平仓（落袋）</span>
           </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-4 h-4 rounded-lg" style={{ backgroundColor: '#ef444422' }} />
-            <span className="text-xs text-claude-muted">仅浮亏变动（亏）</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-1.5 h-1.5 rounded-full bg-blue-400/70" />
-            <span className="text-xs text-claude-muted">仅未实现变动</span>
+          <div className="flex items-center gap-1.5 text-xs text-claude-subtle">
+            按逐日市值法：仅反映当天价格变动
           </div>
           <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full ring-2 ring-blue-500" />

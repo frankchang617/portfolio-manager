@@ -1,12 +1,50 @@
 # 投资组合管理系统 — 任务交接文档
 
-**更新日期**：2026-05-29（第二十八次，日历盈亏逻辑全面重构完成）  
+**更新日期**：2026-05-30（第三十四次，日历改逐日市值法 + 修 YTD 高估）  
 **技术栈**：React 18 + Vite + Tailwind CSS v3 + Recharts + Supabase  
 **运行地址**：http://localhost:5173（本地）/ https://frankchang617.github.io/portfolio-manager/（公网）
 
 ---
 
-## 最新状态（2026-05-29，第三十三次）✅
+## 最新状态（2026-05-30，第三十四次）✅
+
+### 日历盈亏改用「逐日市值法（Mark-to-Market）」+ 修 YTD 高估
+
+**背景问题**：旧逻辑里卖出当天把整个持有期的已实现盈亏（`t.realizedPnL` = 卖价−成本）一次性记到当天，导致「赚钱的卖出」即使当天股价下跌也显示绿色大赚，无法反映当天真实表现。
+
+**改动文件**：`src/components/DailyPnLCalendar.jsx`
+
+**① 日历格子改逐日市值法**
+- 新增模块函数 `prevClose(histPrices, sym, dateStr)`、`closeOn(histPrices, livePrices, sym, dateStr, todayStr)`、`getStockDailyPnL(...)`
+- 单日股票盈亏公式（equity-change 形式，可严格对账，全程加总=已实现+未实现）：
+  - `持仓(开盘) × (今收 − 昨收)` + `Σ当日买入 × (今收 − 买入价)` + `Σ当日卖出 × (卖出价 − 今收)`
+  - 注意卖出项用 `(卖价 − 今收)`，因为开盘持仓已含被卖股票的全日波动
+- 今天用实时价 `state.prices`（closeOn 内处理），昨收取最近交易日历史收盘
+- `calendarDays` 每天产出 `stockDailyPnL`（替代旧 `dailyUnrealizedChange`）
+- 期权无逐日价格 → 仍按平仓日记一次性 `optionRealized`（已说明局限）
+- 格子数值 = `stockDailyPnL + optionRealized`；股票+期权同日时两行「股/期」
+
+**② getCellBg/getPnlDisplay 重写**
+- `getCellBg(pnl)`：纯按正负绿/红，去掉旧蓝色「仅浮盈」配色
+- `getPnlDisplay` 返回 `{ pnl, stockDaily, optionRealized, hadRealizedTrade, realized }`
+- 琥珀色圆点 = 当日有平仓（落袋），替代旧「仅未实现」蓝点
+- hover 详情新增「当日落袋（已实现）」行，同时保留「股票当日变动」「期权已实现」
+
+**③ 修「年初至今·未实现」高估**
+- 旧：YTD 未实现 = `currentUnrealizedPnL`（含跨年持仓往年浮盈，高估，且与总览未实现完全相同）
+- 新：`ytdUnrealizedChange = currentUnrealizedPnL − 年初浮盈`（年初浮盈取上年最后交易日 `getUnrealizedAtDate`）
+- YTD 卡片标签：「未实现」→「未实现变动 / 较年初浮盈」，「已实现」副标题→「1月1日起落袋」
+- 总览·未实现保持 `currentUnrealizedPnL` 不变（全时段累计本就正确）
+
+**保留**：所有「已实现」汇总卡片口径不变（`realizedPnL` = 卖价−成本−手续费，真实落袋）。月度卡片 `已实现 + 未实现变动` 公式不变，恰好 = 当月逐日市值法之和。
+
+**验证**：`npx vite build` 通过。
+
+**关键决策**：日历=「表现口径」（每天真实涨跌），已实现卡片=「会计口径」（落袋），两者并存且互不污染。
+
+---
+
+## 历史状态（2026-05-29，第三十三次）✅
 
 ### 走势图最后一天数据骤降修复
 
