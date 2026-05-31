@@ -241,6 +241,53 @@ function MetricCard({ emoji, label, value, sub, pnl, highlight, breakdown }) {
   )
 }
 
+// ── Performance overview card ────────────────────────────────────────────────
+function PerfCard({ label, pnl, pct, detail, loading }) {
+  const pos = pct != null ? pct > 0 : pnl > 0
+  const neg = pct != null ? pct < 0 : pnl < 0
+  return (
+    <div
+      className={`rounded-2xl p-5 border flex flex-col ${
+        pos ? 'bg-gradient-to-br from-emerald-50 to-white border-emerald-100'
+            : neg ? 'bg-gradient-to-br from-red-50 to-white border-red-100'
+            : 'bg-white border-claude-border'
+      }`}
+      style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}
+    >
+      <p className="text-xs font-medium text-claude-muted mb-3">{label}</p>
+      {loading ? (
+        <div className="space-y-2 mt-1">
+          <div className="w-24 h-8 bg-gray-100 rounded animate-pulse" />
+          <div className="w-16 h-4 bg-gray-100 rounded animate-pulse" />
+        </div>
+      ) : (
+        <div className="flex items-end justify-between">
+          <div>
+            <p className={`text-3xl font-bold leading-none tabular-nums ${
+              pos ? 'text-emerald-600' : neg ? 'text-red-500' : 'text-claude-muted'
+            }`}>
+              {pct != null ? fmt.pctChange(pct) : '—'}
+            </p>
+            {pnl != null && (
+              <p className={`text-sm font-mono mt-2 font-medium ${
+                pos ? 'text-emerald-500' : neg ? 'text-red-400' : 'text-claude-muted'
+              }`}>
+                {fmt.pnl(pnl)}
+              </p>
+            )}
+            {detail && <p className="text-[11px] text-claude-subtle mt-1.5">{detail}</p>}
+          </div>
+          {(pos || neg) && (
+            <div className={`mb-1 opacity-20 ${pos ? 'text-emerald-600' : 'text-red-500'}`}>
+              {pos ? <TrendingUp size={36} /> : <TrendingDown size={36} />}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Portfolio card (grid item) ───────────────────────────────────────────────
 function PortfolioCard({ portfolio, metrics, snapshots, prices, isActive, onSelect }) {
   const annualizedReturn = calcPortfolioIRR(portfolio, prices ?? {})
@@ -515,6 +562,31 @@ export default function Dashboard({ setActiveTab }) {
     return result.length >= 2 ? result : null
   }, [state.portfolios, histPrices, prices])
 
+  const performanceMetrics = useMemo(() => {
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = String(now.getMonth() + 1).padStart(2, '0')
+    const monthStart = `${year}-${month}-01`
+    const ytdStart   = `${year}-01-01`
+
+    const valueBeforeDate = (targetDate) => {
+      if (!historicalAssetData) return null
+      const before = historicalAssetData.filter(d => d.date < targetDate)
+      return before.length ? before[before.length - 1].totalValue : null
+    }
+
+    const monthBase = valueBeforeDate(monthStart)
+    const ytdBase   = valueBeforeDate(ytdStart)
+    const cur = totals.totalValue
+
+    return {
+      monthPnL: monthBase != null ? cur - monthBase : null,
+      monthPct: monthBase     ? ((cur - monthBase) / monthBase) * 100 : null,
+      ytdPnL:   ytdBase != null ? cur - ytdBase   : null,
+      ytdPct:   ytdBase       ? ((cur - ytdBase)   / ytdBase)   * 100 : null,
+    }
+  }, [historicalAssetData, totals.totalValue])
+
   const snapshotData = useMemo(() => {
     // Prefer reconstructed historical data; fall back to dailySnapshots
     const baseData = historicalAssetData ?? (state.dailySnapshots ?? [])
@@ -595,7 +667,37 @@ export default function Dashboard({ setActiveTab }) {
   return (
     <div className="space-y-6">
 
-      {/* ── 8 cross-portfolio metric cards ── */}
+      {/* ── Performance % overview (4 cards) ── */}
+      <div className="grid grid-cols-4 gap-3">
+        <PerfCard
+          label="今日涨跌"
+          pnl={totals.todayPnL}
+          pct={totals.todayPct}
+          detail="较昨日收盘"
+        />
+        <PerfCard
+          label="本月涨跌"
+          pnl={performanceMetrics.monthPnL}
+          pct={performanceMetrics.monthPct}
+          detail="自本月初"
+          loading={histLoading && historicalAssetData == null}
+        />
+        <PerfCard
+          label="年初至今"
+          pnl={performanceMetrics.ytdPnL}
+          pct={performanceMetrics.ytdPct}
+          detail={`自 ${new Date().getFullYear()} 年 1 月 1 日`}
+          loading={histLoading && historicalAssetData == null}
+        />
+        <PerfCard
+          label="总收益率"
+          pnl={totals.totalPnL}
+          pct={totals.totalPnLPct}
+          detail={`基于持仓成本 ${fmt.large(totals.costBasis)}`}
+        />
+      </div>
+
+      {/* ── Cross-portfolio metric cards ── */}
       <div className="flex gap-3 overflow-x-auto pb-1">
         {metricCards.map((c, i) => <MetricCard key={i} {...c} />)}
       </div>

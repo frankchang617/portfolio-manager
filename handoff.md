@@ -1,12 +1,38 @@
 # 投资组合管理系统 — 任务交接文档
 
-**更新日期**：2026-05-30（第三十四次，日历改逐日市值法 + 修 YTD 高估）  
+**更新日期**：2026-05-31（第三十五次，总览新增 4 张性能百分比卡片）  
 **技术栈**：React 18 + Vite + Tailwind CSS v3 + Recharts + Supabase  
 **运行地址**：http://localhost:5173（本地）/ https://frankchang617.github.io/portfolio-manager/（公网）
 
 ---
 
-## 最新状态（2026-05-30，第三十四次）✅
+## 最新状态（2026-05-31，第三十五次）✅
+
+### 总览新增 4 张性能百分比卡片
+
+**改动文件**：`src/components/Dashboard.jsx`
+
+**新增 `PerfCard` 组件**（在 `MetricCard` 之后）：
+- 正收益：绿色渐变背景 (`from-emerald-50`) + 大号绿色 % + 右侧透明趋势箭头
+- 负收益：红色渐变背景 + 红色数字
+- 历史数据加载中时显示骨架动画（`animate-pulse`）
+- 主显示：大号 % (`text-3xl font-bold`)；次显示：金额 (`text-sm font-mono`)；辅助文字说明基数日期
+
+**新增 `performanceMetrics` useMemo**（依赖 `historicalAssetData` + `totals.totalValue`）：
+- **今日涨跌**：`totals.todayPnL / totals.todayPct`，来自 Finnhub 实时价，与昨收比较，无需历史数据
+- **本月涨跌**：基数 = `historicalAssetData` 中最后一条 `date < monthStart` 的数据点，即上个月最后一个交易日收盘价
+- **年初至今**：基数 = 最后一条 `date < ytdStart` 的数据点，即去年最后一个交易日收盘价
+- **总收益率**：`totals.totalPnL / totals.totalPnLPct`，基于持仓成本（`costBasis`）
+
+**布局**：4 张 PerfCard 放在顶部 `grid grid-cols-4 gap-3`，原有 7 张 MetricCard 横向滚动行保持不变在其下方。
+
+**验证**：`npx vite build` 通过，浏览器截图确认布局正确。
+
+**关键决策**：本月/年初至今的基数均取 Yahoo Finance 历史价中严格小于起始日的最后一条，天然对齐上个月/上年最后交易日，无需额外节假日处理。
+
+---
+
+## 历史状态（2026-05-30，第三十四次）✅
 
 ### 日历盈亏改用「逐日市值法（Mark-to-Market）」+ 修 YTD 高估
 
