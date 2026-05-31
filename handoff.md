@@ -1,12 +1,22 @@
 # 投资组合管理系统 — 任务交接文档
 
-**更新日期**：2026-05-31（第三十九次，日历拆成股票/期权两个独立日历图）  
+**更新日期**：2026-05-31（第四十次，修复日历白屏 bug）  
 **技术栈**：React 18 + Vite + Tailwind CSS v3 + Recharts + Supabase  
 **运行地址**：http://localhost:5173（本地）/ https://frankchang617.github.io/portfolio-manager/（公网）
 
 ---
 
-## 最新状态（2026-05-31，第三十九次）✅
+## 最新状态（2026-05-31，第四十次）✅
+
+### 修复日历盈亏白屏 bug（commit `2fd5205`）
+
+**根因**：`CalendarGrid` 是模块级函数，但 `getCellBg` 定义在 `DailyPnLCalendar` 主组件内部，运行时抛 `ReferenceError`，点开日历页面立即白屏。
+
+**修复**：将 `getCellBg` 从主组件内部提升至模块顶层（`CalendarGrid` 定义之前），删除主组件内的重复定义。
+
+---
+
+## 历史状态（2026-05-31，第三十九次）✅
 
 ### 日历盈亏拆成股票/期权两个独立日历图
 
