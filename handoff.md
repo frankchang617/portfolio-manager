@@ -1,12 +1,42 @@
 # 投资组合管理系统 — 任务交接文档
 
-**更新日期**：2026-05-31（第三十八次，股票/期权盈亏分离显示）  
+**更新日期**：2026-05-31（第三十九次，日历拆成股票/期权两个独立日历图）  
 **技术栈**：React 18 + Vite + Tailwind CSS v3 + Recharts + Supabase  
 **运行地址**：http://localhost:5173（本地）/ https://frankchang617.github.io/portfolio-manager/（公网）
 
 ---
 
-## 最新状态（2026-05-31，第三十八次）✅
+## 最新状态（2026-05-31，第三十九次）✅
+
+### 日历盈亏拆成股票/期权两个独立日历图
+
+**改动文件**：`src/components/DailyPnLCalendar.jsx`
+
+**新增 `CalendarGrid` 子组件**（在 `export default` 之前）：
+- Props：`title` / `calendarDays` / `getCell` / `monthlyPnL` / `loading` / `todayStr` / `dotLegend`
+- `getCell(dayObj)` 返回 `{ pnl, lines:[{text,cls}], dot, hoverItems:[{label,value}] }`
+- 自带独立 `hoveredDate` state，互不干扰
+- 包含 hover 详情行 + 图例行，复用 `getCellBg` / `compactPnL`
+
+**主组件改动**：
+- 移除旧 `[hoveredDate, setHoveredDate]` state（已移入 CalendarGrid）
+- 新增 `monthlyStockPnL` useMemo：汇总当月所有 `stockDailyPnL`（逐日市值法之和）
+- 新增 `monthlyOptionPnL` useMemo：汇总当月所有 `optionRealized`
+- 新增 `hasOptions`：检查当前处理的组合是否含期权
+- 新增 `stockGetCell` / `optionGetCell` 函数：分别提取股票和期权每日 P&L
+- 旧单一日历卡片替换为两个 `CalendarGrid` 实例
+
+**显示逻辑**：
+- 股票日历：始终显示；每格展示 `stockDailyPnL`；琥珀点 = 当日有股票落袋
+- 期权日历：仅当 `hasOptions` 为 true 时显示；只有实际有期权平仓的日期才有颜色/数值
+
+**月度汇总卡片（页面顶部三张）保持不变**，继续显示股票+期权合计。
+
+**验证**：`npx vite build` 通过。
+
+---
+
+## 历史状态（2026-05-31，第三十八次）✅
 
 ### 股票/期权盈亏分离显示，修复总收益率虚高问题
 

@@ -116,6 +116,127 @@ function offsetDate(dateStr, days) {
   return d.toISOString().split('T')[0]
 }
 
+// ── Reusable calendar grid ───────────────────────────────────────────────────
+// getCell(dayObj) => { pnl, lines:[{text,cls}], dot, hoverItems:[{label,value}] }
+function CalendarGrid({ title, calendarDays, getCell, monthlyPnL, loading, todayStr, dotLegend }) {
+  const [hoveredDate, setHoveredDate] = useState(null)
+  return (
+    <div className="card p-5">
+      {/* Header: title + monthly total */}
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-sm font-semibold text-claude-text">{title}</p>
+        {loading ? (
+          <p className="text-sm text-claude-muted animate-pulse">加载中…</p>
+        ) : monthlyPnL != null ? (
+          <p className={`text-lg font-bold font-mono ${monthlyPnL >= 0 ? 'profit-text' : 'loss-text'}`}>
+            {fmt.pnl(monthlyPnL)}
+          </p>
+        ) : (
+          <p className="text-sm text-claude-muted">—</p>
+        )}
+      </div>
+
+      {/* Weekday headers */}
+      <div className="grid grid-cols-7 mb-3">
+        {WEEKDAYS.map((d, i) => (
+          <div key={d} className={`text-center text-xs font-semibold py-2 ${
+            i === 0 ? 'text-red-400' : i === 6 ? 'text-blue-400' : 'text-claude-subtle'
+          }`}>{d}</div>
+        ))}
+      </div>
+
+      {/* Grid */}
+      <div className="grid grid-cols-7 gap-1.5">
+        {calendarDays.map((dayObj, i) => {
+          if (!dayObj) return <div key={`pad-${i}`} />
+          const { pnl, lines, dot } = getCell(dayObj)
+          const bg = getCellBg(pnl)
+          const isToday = dayObj.dateStr === todayStr
+          const isFuture = dayObj.dateStr > todayStr
+          const dow = new Date(dayObj.dateStr + 'T00:00:00').getDay()
+          return (
+            <div
+              key={dayObj.dateStr}
+              onMouseEnter={() => setHoveredDate(dayObj.dateStr)}
+              onMouseLeave={() => setHoveredDate(null)}
+              className={`relative rounded-xl flex flex-col items-center justify-center py-2 px-1 min-h-[64px] transition-all duration-150 cursor-default
+                ${isToday ? 'ring-2 ring-blue-500 ring-offset-1' : ''}
+                ${isFuture ? 'opacity-30' : ''}
+                ${pnl == null ? 'hover:bg-gray-50' : 'hover:brightness-95'}
+              `}
+              style={{ backgroundColor: bg || undefined }}
+            >
+              <span className={`text-sm font-semibold leading-none mb-1 ${
+                isToday ? 'text-blue-600'
+                : dow === 0 ? 'text-red-500'
+                : dow === 6 ? 'text-blue-500'
+                : pnl !== null ? (pnl > 0 ? 'profit-text' : 'loss-text')
+                : 'text-claude-text'
+              }`}>{dayObj.day}</span>
+              {lines?.map((line, li) => (
+                <span key={li} className={`text-[11px] font-bold leading-tight ${line.cls}`}>{line.text}</span>
+              ))}
+              {dot && (
+                <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-amber-400 ring-1 ring-amber-500/40" />
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Hover detail */}
+      {hoveredDate && (() => {
+        const dayObj = calendarDays.find(d => d?.dateStr === hoveredDate)
+        if (!dayObj) return null
+        const { pnl, hoverItems } = getCell(dayObj)
+        if (pnl == null || !hoverItems?.length) return null
+        return (
+          <div className="mt-4 pt-4 border-t border-claude-border">
+            <div className="flex items-center gap-6 flex-wrap">
+              <span className="text-sm font-medium text-claude-text">
+                {new Date(hoveredDate + 'T00:00:00').toLocaleDateString('zh-CN', {
+                  year: 'numeric', month: 'long', day: 'numeric'
+                })}
+              </span>
+              {hoverItems.map((item, i) => (
+                <div key={i} className="flex items-center gap-1.5">
+                  <span className="text-xs text-claude-muted">{item.label}</span>
+                  <span className={`text-sm font-bold font-mono ${item.value >= 0 ? 'profit-text' : 'loss-text'}`}>
+                    {fmt.pnl(item.value)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Legend */}
+      <div className="flex items-center gap-5 mt-4 pt-4 border-t border-claude-border flex-wrap">
+        <span className="text-xs text-claude-muted font-medium">图例：</span>
+        <div className="flex items-center gap-1.5">
+          <div className="w-4 h-4 rounded-lg" style={{ backgroundColor: '#16a34a55' }} />
+          <span className="text-xs text-claude-muted">盈利</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-4 h-4 rounded-lg" style={{ backgroundColor: '#dc262655' }} />
+          <span className="text-xs text-claude-muted">亏损</span>
+        </div>
+        {dotLegend && (
+          <div className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 ring-1 ring-amber-500/40 inline-block" />
+            <span className="text-xs text-claude-muted">{dotLegend}</span>
+          </div>
+        )}
+        <div className="flex items-center gap-1.5">
+          <div className="w-2 h-2 rounded-full ring-2 ring-blue-500" />
+          <span className="text-xs text-claude-muted">今天</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function DailyPnLCalendar() {
   const { state, activePortfolio } = usePortfolio()
   const isAggregate = activePortfolio?.isAggregate === true
@@ -123,7 +244,6 @@ export default function DailyPnLCalendar() {
   const todayStr = today.toISOString().split('T')[0]
   const [year, setYear] = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth())
-  const [hoveredDate, setHoveredDate] = useState(null)
   const [histPrices, setHistPrices] = useState({})
   const [histLoading, setHistLoading] = useState(false)
   const fetchedSymbols = useRef(new Set())
@@ -352,6 +472,53 @@ export default function DailyPnLCalendar() {
     return monthlyUnrealizedPnL + monthlySummary.totalRealized
   }, [monthlyUnrealizedPnL, monthlySummary.totalRealized])
 
+  // Monthly P&L split by type — for individual calendar headers
+  const monthlyStockPnL = useMemo(() => {
+    let total = 0, hasData = false
+    for (const d of calendarDays) {
+      if (!d || d.stockDailyPnL == null) continue
+      total += d.stockDailyPnL; hasData = true
+    }
+    return hasData ? total : null
+  }, [calendarDays])
+
+  const monthlyOptionPnL = useMemo(() => {
+    let total = 0
+    for (const d of calendarDays) {
+      if (!d?.data) continue
+      total += d.data.optionRealized ?? 0
+    }
+    return total !== 0 ? total : null
+  }, [calendarDays])
+
+  const hasOptions = portfoliosToProcess.some(p => (p.options ?? []).length > 0)
+
+  // getCell factories for each calendar type
+  const stockGetCell = (dayObj) => {
+    const pnl = dayObj.stockDailyPnL
+    const stockRealized = dayObj.data?.stockRealized ?? 0
+    return {
+      pnl,
+      lines: pnl != null ? [{ text: compactPnL(pnl), cls: pnl >= 0 ? 'profit-text' : 'loss-text' }] : [],
+      dot: stockRealized !== 0 && pnl != null,
+      hoverItems: pnl != null ? [
+        { label: '股票当日盈亏', value: pnl },
+        ...(stockRealized !== 0 ? [{ label: '当日落袋（股票）', value: stockRealized }] : []),
+      ] : [],
+    }
+  }
+
+  const optionGetCell = (dayObj) => {
+    const raw = dayObj.data?.optionRealized ?? null
+    const pnl = raw != null && raw !== 0 ? raw : null
+    return {
+      pnl,
+      lines: pnl != null ? [{ text: compactPnL(pnl), cls: pnl >= 0 ? 'profit-text' : 'loss-text' }] : [],
+      dot: false,
+      hoverItems: pnl != null ? [{ label: '期权已实现', value: pnl }] : [],
+    }
+  }
+
   const prevMonth = () => {
     if (month === 0) { setMonth(11); setYear(y => y - 1) }
     else setMonth(m => m - 1)
@@ -557,154 +724,28 @@ export default function DailyPnLCalendar() {
 
       </div>
 
-      {/* Calendar grid */}
-      <div className="card p-5">
-        <div className="grid grid-cols-7 mb-3">
-          {WEEKDAYS.map((d, i) => (
-            <div key={d} className={`text-center text-xs font-semibold py-2 ${
-              i === 0 ? 'text-red-400' : i === 6 ? 'text-blue-400' : 'text-claude-subtle'
-            }`}>
-              {d}
-            </div>
-          ))}
-        </div>
+      {/* Stock calendar */}
+      <CalendarGrid
+        title="股票日历"
+        calendarDays={calendarDays}
+        getCell={stockGetCell}
+        monthlyPnL={monthlyStockPnL}
+        loading={histLoading && monthlyStockPnL == null}
+        todayStr={todayStr}
+        dotLegend="当日有股票落袋"
+      />
 
-        <div className="grid grid-cols-7 gap-1.5">
-          {calendarDays.map((dayObj, i) => {
-            if (!dayObj) return <div key={`pad-${i}`} />
-
-            const { day, dateStr, data, stockDailyPnL } = dayObj
-            const { pnl, stockDaily, optionRealized, hadRealizedTrade } = getPnlDisplay(data, stockDailyPnL)
-            const bg = getCellBg(pnl)
-            const isToday = dateStr === todayStr
-            const isFuture = dateStr > todayStr
-            const dow = new Date(dateStr + 'T00:00:00').getDay()
-
-            return (
-              <div
-                key={dateStr}
-                onMouseEnter={() => setHoveredDate(dateStr)}
-                onMouseLeave={() => setHoveredDate(null)}
-                className={`relative rounded-xl flex flex-col items-center justify-center py-2 px-1 min-h-[64px] transition-all duration-150 cursor-default
-                  ${isToday ? 'ring-2 ring-blue-500 ring-offset-1' : ''}
-                  ${isFuture ? 'opacity-30' : ''}
-                  ${pnl == null ? 'hover:bg-gray-50' : 'hover:brightness-95'}
-                `}
-                style={{ backgroundColor: bg || undefined }}
-              >
-                <span className={`text-sm font-semibold leading-none mb-1 ${
-                  isToday ? 'text-blue-600'
-                  : dow === 0 ? 'text-red-500'
-                  : dow === 6 ? 'text-blue-500'
-                  : pnl !== null ? (pnl > 0 ? 'profit-text' : 'loss-text')
-                  : 'text-claude-text'
-                }`}>
-                  {day}
-                </span>
-
-                {pnl !== null && (() => {
-                  // Two lines when both a stock daily move and an option close exist that day
-                  if (stockDaily != null && stockDaily !== 0 && optionRealized !== 0) {
-                    return (
-                      <>
-                        <span className={`text-[10px] font-bold leading-none ${stockDaily > 0 ? 'profit-text' : 'loss-text'}`}>
-                          股 {compactPnL(stockDaily)}
-                        </span>
-                        <span className={`text-[10px] font-bold leading-none ${optionRealized > 0 ? 'profit-text' : 'loss-text'}`}>
-                          期 {compactPnL(optionRealized)}
-                        </span>
-                      </>
-                    )
-                  }
-                  return (
-                    <span className={`text-[11px] font-bold leading-tight ${pnl > 0 ? 'profit-text' : 'loss-text'}`}>
-                      {compactPnL(pnl)}
-                    </span>
-                  )
-                })()}
-
-                {/* Dot = a position was closed (realized) that day */}
-                {hadRealizedTrade && pnl !== null && (
-                  <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-amber-400 ring-1 ring-amber-500/40" />
-                )}
-              </div>
-            )
-          })}
-        </div>
-
-        {/* Hover detail */}
-        {hoveredDate && (() => {
-          const dayObj = calendarDays.find(d => d?.dateStr === hoveredDate)
-          if (!dayObj) return null
-          const { pnl, stockDaily, optionRealized } = getPnlDisplay(dayObj.data, dayObj.stockDailyPnL)
-          if (pnl == null) return null
-          const sr = dayObj.data?.stockRealized ?? 0
-          const realizedTotal = sr + optionRealized  // 落袋(已实现) that day
-          return (
-            <div className="mt-4 pt-4 border-t border-claude-border">
-              <div className="flex items-center gap-6 flex-wrap">
-                <span className="text-sm font-medium text-claude-text">
-                  {new Date(hoveredDate + 'T00:00:00').toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })}
-                </span>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-claude-muted">当日盈亏</span>
-                  <span className={`text-sm font-bold font-mono ${pnl >= 0 ? 'profit-text' : 'loss-text'}`}>
-                    {fmt.pnl(pnl)}
-                  </span>
-                </div>
-                {stockDaily != null && stockDaily !== 0 && (
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-claude-muted">股票当日变动</span>
-                    <span className={`text-sm font-bold font-mono ${stockDaily >= 0 ? 'profit-text' : 'loss-text'}`}>
-                      {fmt.pnl(stockDaily)}
-                    </span>
-                  </div>
-                )}
-                {optionRealized !== 0 && (
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-claude-muted">期权已实现</span>
-                    <span className={`text-sm font-bold font-mono ${optionRealized >= 0 ? 'profit-text' : 'loss-text'}`}>
-                      {fmt.pnl(optionRealized)}
-                    </span>
-                  </div>
-                )}
-                {realizedTotal !== 0 && (
-                  <div className="flex items-center gap-1.5 pl-3 border-l border-claude-border">
-                    <span className="text-xs text-claude-muted">当日落袋（已实现）</span>
-                    <span className={`text-sm font-bold font-mono ${realizedTotal >= 0 ? 'profit-text' : 'loss-text'}`}>
-                      {fmt.pnl(realizedTotal)}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-          )
-        })()}
-
-        {/* Legend */}
-        <div className="flex items-center gap-5 mt-4 pt-4 border-t border-claude-border flex-wrap">
-          <span className="text-xs text-claude-muted font-medium">图例：</span>
-          <div className="flex items-center gap-1.5">
-            <div className="w-4 h-4 rounded-lg" style={{ backgroundColor: '#16a34a55' }} />
-            <span className="text-xs text-claude-muted">当日盈利</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-4 h-4 rounded-lg" style={{ backgroundColor: '#dc262655' }} />
-            <span className="text-xs text-claude-muted">当日亏损</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-1.5 h-1.5 rounded-full bg-amber-400 ring-1 ring-amber-500/40" />
-            <span className="text-xs text-claude-muted">当日有平仓（落袋）</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-xs text-claude-subtle">
-            按逐日市值法：仅反映当天价格变动
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full ring-2 ring-blue-500" />
-            <span className="text-xs text-claude-muted">今天</span>
-          </div>
-        </div>
-      </div>
+      {/* Option calendar — only rendered when the portfolio has options */}
+      {hasOptions && (
+        <CalendarGrid
+          title="期权日历"
+          calendarDays={calendarDays}
+          getCell={optionGetCell}
+          monthlyPnL={monthlyOptionPnL}
+          loading={false}
+          todayStr={todayStr}
+        />
+      )}
 
     </div>
   )
