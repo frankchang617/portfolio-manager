@@ -130,32 +130,32 @@ function getCellBg(pnl) {
 function CalendarGrid({ title, calendarDays, getCell, monthlyPnL, loading, todayStr, dotLegend }) {
   const [hoveredDate, setHoveredDate] = useState(null)
   return (
-    <div className="card p-5">
+    <div className="card p-4">
       {/* Header: title + monthly total */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-2">
         <p className="text-sm font-semibold text-claude-text">{title}</p>
         {loading ? (
-          <p className="text-sm text-claude-muted animate-pulse">加载中…</p>
+          <p className="text-xs text-claude-muted animate-pulse">加载中…</p>
         ) : monthlyPnL != null ? (
-          <p className={`text-lg font-bold font-mono ${monthlyPnL >= 0 ? 'profit-text' : 'loss-text'}`}>
+          <p className={`text-base font-bold font-mono ${monthlyPnL >= 0 ? 'profit-text' : 'loss-text'}`}>
             {fmt.pnl(monthlyPnL)}
           </p>
         ) : (
-          <p className="text-sm text-claude-muted">—</p>
+          <p className="text-xs text-claude-muted">—</p>
         )}
       </div>
 
       {/* Weekday headers */}
-      <div className="grid grid-cols-7 mb-3">
+      <div className="grid grid-cols-7 mb-1">
         {WEEKDAYS.map((d, i) => (
-          <div key={d} className={`text-center text-xs font-semibold py-2 ${
+          <div key={d} className={`text-center text-[11px] font-semibold py-1 ${
             i === 0 ? 'text-red-400' : i === 6 ? 'text-blue-400' : 'text-claude-subtle'
           }`}>{d}</div>
         ))}
       </div>
 
       {/* Grid */}
-      <div className="grid grid-cols-7 gap-1.5">
+      <div className="grid grid-cols-7 gap-1">
         {calendarDays.map((dayObj, i) => {
           if (!dayObj) return <div key={`pad-${i}`} />
           const { pnl, lines, dot } = getCell(dayObj)
@@ -168,14 +168,14 @@ function CalendarGrid({ title, calendarDays, getCell, monthlyPnL, loading, today
               key={dayObj.dateStr}
               onMouseEnter={() => setHoveredDate(dayObj.dateStr)}
               onMouseLeave={() => setHoveredDate(null)}
-              className={`relative rounded-xl flex flex-col items-center justify-center py-2 px-1 min-h-[64px] transition-all duration-150 cursor-default
+              className={`relative rounded-lg flex flex-col items-center justify-center py-1.5 px-0.5 min-h-[52px] transition-all duration-150 cursor-default
                 ${isToday ? 'ring-2 ring-blue-500 ring-offset-1' : ''}
                 ${isFuture ? 'opacity-30' : ''}
                 ${pnl == null ? 'hover:bg-gray-50' : 'hover:brightness-95'}
               `}
               style={{ backgroundColor: bg || undefined }}
             >
-              <span className={`text-sm font-semibold leading-none mb-1 ${
+              <span className={`text-xs font-semibold leading-none mb-0.5 ${
                 isToday ? 'text-blue-600'
                 : dow === 0 ? 'text-red-500'
                 : dow === 6 ? 'text-blue-500'
@@ -183,10 +183,10 @@ function CalendarGrid({ title, calendarDays, getCell, monthlyPnL, loading, today
                 : 'text-claude-text'
               }`}>{dayObj.day}</span>
               {lines?.map((line, li) => (
-                <span key={li} className={`text-[11px] font-bold leading-tight ${line.cls}`}>{line.text}</span>
+                <span key={li} className={`text-[10px] font-bold leading-tight ${line.cls}`}>{line.text}</span>
               ))}
               {dot && (
-                <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-amber-400 ring-1 ring-amber-500/40" />
+                <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-400 ring-1 ring-amber-500/40" />
               )}
             </div>
           )
@@ -200,17 +200,17 @@ function CalendarGrid({ title, calendarDays, getCell, monthlyPnL, loading, today
         const { pnl, hoverItems } = getCell(dayObj)
         if (pnl == null || !hoverItems?.length) return null
         return (
-          <div className="mt-4 pt-4 border-t border-claude-border">
-            <div className="flex items-center gap-6 flex-wrap">
-              <span className="text-sm font-medium text-claude-text">
+          <div className="mt-2 pt-2 border-t border-claude-border">
+            <div className="flex items-center gap-4 flex-wrap">
+              <span className="text-xs font-medium text-claude-text">
                 {new Date(hoveredDate + 'T00:00:00').toLocaleDateString('zh-CN', {
                   year: 'numeric', month: 'long', day: 'numeric'
                 })}
               </span>
               {hoverItems.map((item, i) => (
-                <div key={i} className="flex items-center gap-1.5">
-                  <span className="text-xs text-claude-muted">{item.label}</span>
-                  <span className={`text-sm font-bold font-mono ${item.value >= 0 ? 'profit-text' : 'loss-text'}`}>
+                <div key={i} className="flex items-center gap-1">
+                  <span className="text-[11px] text-claude-muted">{item.label}</span>
+                  <span className={`text-xs font-bold font-mono ${item.value >= 0 ? 'profit-text' : 'loss-text'}`}>
                     {fmt.pnl(item.value)}
                   </span>
                 </div>
@@ -221,25 +221,25 @@ function CalendarGrid({ title, calendarDays, getCell, monthlyPnL, loading, today
       })()}
 
       {/* Legend */}
-      <div className="flex items-center gap-5 mt-4 pt-4 border-t border-claude-border flex-wrap">
-        <span className="text-xs text-claude-muted font-medium">图例：</span>
-        <div className="flex items-center gap-1.5">
-          <div className="w-4 h-4 rounded-lg" style={{ backgroundColor: '#16a34a55' }} />
-          <span className="text-xs text-claude-muted">盈利</span>
+      <div className="flex items-center gap-3 mt-2 pt-2 border-t border-claude-border flex-wrap">
+        <span className="text-[11px] text-claude-muted font-medium">图例：</span>
+        <div className="flex items-center gap-1">
+          <div className="w-3 h-3 rounded" style={{ backgroundColor: '#16a34a55' }} />
+          <span className="text-[11px] text-claude-muted">盈利</span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-4 h-4 rounded-lg" style={{ backgroundColor: '#dc262655' }} />
-          <span className="text-xs text-claude-muted">亏损</span>
+        <div className="flex items-center gap-1">
+          <div className="w-3 h-3 rounded" style={{ backgroundColor: '#dc262655' }} />
+          <span className="text-[11px] text-claude-muted">亏损</span>
         </div>
         {dotLegend && (
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-400 ring-1 ring-amber-500/40 inline-block" />
-            <span className="text-xs text-claude-muted">{dotLegend}</span>
+            <span className="text-[11px] text-claude-muted">{dotLegend}</span>
           </div>
         )}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
           <div className="w-2 h-2 rounded-full ring-2 ring-blue-500" />
-          <span className="text-xs text-claude-muted">今天</span>
+          <span className="text-[11px] text-claude-muted">今天</span>
         </div>
       </div>
     </div>
@@ -548,28 +548,28 @@ export default function DailyPnLCalendar() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
 
       {/* Navigation bar */}
-      <div className="card p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
+      <div className="card p-3">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-1.5">
             <button onClick={prevMonth}
-              className="p-2 rounded-xl hover:bg-gray-100 transition-colors text-claude-muted hover:text-claude-text">
-              <ChevronLeft size={17} />
+              className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-claude-muted hover:text-claude-text">
+              <ChevronLeft size={15} />
             </button>
-            <h2 className="text-xl font-bold text-claude-text min-w-[140px] text-center">
+            <h2 className="text-base font-bold text-claude-text min-w-[120px] text-center">
               {year}年&nbsp;{MONTHS[month]}
             </h2>
             <button onClick={nextMonth}
-              className="p-2 rounded-xl hover:bg-gray-100 transition-colors text-claude-muted hover:text-claude-text">
-              <ChevronRight size={17} />
+              className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-claude-muted hover:text-claude-text">
+              <ChevronRight size={15} />
             </button>
           </div>
           <div className="flex items-center gap-1">
             {availableYears.map(y => (
               <button key={y} onClick={() => setYear(y)}
-                className={`px-3 py-1.5 rounded-xl text-sm font-medium transition-all ${
+                className={`px-2 py-1 rounded-lg text-xs font-medium transition-all ${
                   year === y
                     ? 'bg-blue-600 text-white shadow-sm'
                     : 'text-claude-muted hover:bg-gray-100 hover:text-claude-text'
@@ -582,7 +582,7 @@ export default function DailyPnLCalendar() {
         <div className="flex gap-1 flex-wrap">
           {MONTHS.map((m, i) => (
             <button key={i} onClick={() => setMonth(i)}
-              className={`px-3 py-1.5 rounded-xl text-sm font-medium transition-all ${
+              className={`px-2 py-1 rounded-lg text-xs font-medium transition-all ${
                 month === i
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'text-claude-muted hover:bg-gray-100 hover:text-claude-text'
@@ -593,75 +593,74 @@ export default function DailyPnLCalendar() {
         </div>
       </div>
 
-      {/* Summary panels — three grouped section cards */}
-      <div className="space-y-3">
+      {/* Summary panels */}
+      <div className="space-y-2">
 
         {/* All-time */}
-        <div className="card p-5">
-          <p className="text-[11px] font-semibold text-claude-muted uppercase tracking-wider mb-4">总览</p>
+        <div className="card p-3">
+          <p className="text-[11px] font-semibold text-claude-muted uppercase tracking-wider mb-2">总览</p>
           <div className="flex">
-            <div className="flex-1 pr-5">
-              <p className="text-xs text-claude-muted mb-1">总盈亏</p>
-              <p className={`text-2xl font-bold ${getPnLClass(totalPnL)}`}>
+            <div className="flex-1 pr-4">
+              <p className="text-[11px] text-claude-muted mb-0.5">总盈亏</p>
+              <p className={`text-xl font-bold ${getPnLClass(totalPnL)}`}>
                 {totalPnL !== 0 ? fmt.pnl(totalPnL) : '—'}
               </p>
-              <p className="text-xs text-claude-muted mt-1">已实现 + 未实现</p>
+              <p className="text-[11px] text-claude-muted mt-0.5">已实现 + 未实现</p>
             </div>
-            <div className="flex-1 px-5 border-l border-claude-border">
-              <p className="text-xs text-claude-muted mb-1">已实现</p>
-              <p className={`text-xl font-bold ${getPnLClass(totalRealizedPnL)}`}>
+            <div className="flex-1 px-4 border-l border-claude-border">
+              <p className="text-[11px] text-claude-muted mb-0.5">已实现</p>
+              <p className={`text-lg font-bold ${getPnLClass(totalRealizedPnL)}`}>
                 {totalRealizedPnL !== 0 ? fmt.pnl(totalRealizedPnL) : '—'}
               </p>
-              <p className="text-xs text-claude-muted mt-1">历史全部</p>
+              <p className="text-[11px] text-claude-muted mt-0.5">历史全部</p>
             </div>
-            <div className="flex-1 pl-5 border-l border-claude-border">
-              <p className="text-xs text-claude-muted mb-1">未实现</p>
-              <p className={`text-xl font-bold ${getPnLClass(currentUnrealizedPnL)}`}>
+            <div className="flex-1 pl-4 border-l border-claude-border">
+              <p className="text-[11px] text-claude-muted mb-0.5">未实现</p>
+              <p className={`text-lg font-bold ${getPnLClass(currentUnrealizedPnL)}`}>
                 {currentUnrealizedPnL !== 0 ? fmt.pnl(currentUnrealizedPnL) : '—'}
               </p>
-              <p className="text-xs text-claude-muted mt-1">当前持仓</p>
+              <p className="text-[11px] text-claude-muted mt-0.5">当前持仓</p>
             </div>
           </div>
         </div>
 
         {/* YTD */}
-        <div className="card p-5">
-          <p className="text-[11px] font-semibold text-claude-muted uppercase tracking-wider mb-4">
+        <div className="card p-3">
+          <p className="text-[11px] font-semibold text-claude-muted uppercase tracking-wider mb-2">
             年初至今 · {new Date().getFullYear()}
           </p>
           <div className="flex">
-            <div className="flex-1 pr-5">
-              <p className="text-xs text-claude-muted mb-1">总盈亏</p>
-              <p className={`text-2xl font-bold ${getPnLClass(ytdTotalPnL)}`}>
+            <div className="flex-1 pr-4">
+              <p className="text-[11px] text-claude-muted mb-0.5">总盈亏</p>
+              <p className={`text-xl font-bold ${getPnLClass(ytdTotalPnL)}`}>
                 {ytdTotalPnL !== 0 ? fmt.pnl(ytdTotalPnL) : '—'}
               </p>
-              <p className="text-xs text-claude-muted mt-1">已实现 + 未实现</p>
+              <p className="text-[11px] text-claude-muted mt-0.5">已实现 + 未实现</p>
             </div>
-            <div className="flex-1 px-5 border-l border-claude-border">
-              <p className="text-xs text-claude-muted mb-1">已实现</p>
-              <p className={`text-xl font-bold ${getPnLClass(ytdSummary)}`}>
+            <div className="flex-1 px-4 border-l border-claude-border">
+              <p className="text-[11px] text-claude-muted mb-0.5">已实现</p>
+              <p className={`text-lg font-bold ${getPnLClass(ytdSummary)}`}>
                 {ytdSummary !== 0 ? fmt.pnl(ytdSummary) : '—'}
               </p>
-              <p className="text-xs text-claude-muted mt-1">1 月 1 日起落袋</p>
+              <p className="text-[11px] text-claude-muted mt-0.5">1 月 1 日起落袋</p>
             </div>
-            <div className="flex-1 pl-5 border-l border-claude-border">
-              <p className="text-xs text-claude-muted mb-1">未实现变动</p>
-              <p className={`text-xl font-bold ${getPnLClass(ytdUnrealizedChange)}`}>
+            <div className="flex-1 pl-4 border-l border-claude-border">
+              <p className="text-[11px] text-claude-muted mb-0.5">未实现变动</p>
+              <p className={`text-lg font-bold ${getPnLClass(ytdUnrealizedChange)}`}>
                 {ytdUnrealizedChange !== 0 ? fmt.pnl(ytdUnrealizedChange) : '—'}
               </p>
-              <p className="text-xs text-claude-muted mt-1">较年初浮盈</p>
+              <p className="text-[11px] text-claude-muted mt-0.5">较年初浮盈</p>
             </div>
           </div>
         </div>
 
         {/* Monthly */}
-        <div className="card p-5">
-          {/* Header row */}
-          <div className="flex items-center justify-between mb-4">
+        <div className="card p-3">
+          <div className="flex items-center justify-between mb-2">
             <p className="text-[11px] font-semibold text-claude-muted uppercase tracking-wider">
               {year} 年 {MONTHS[month]}
             </p>
-            <div className="flex items-center gap-4 text-xs text-claude-muted">
+            <div className="flex items-center gap-3 text-[11px] text-claude-muted">
               {monthlySummary.winRate !== null && (
                 <span>
                   胜率&nbsp;
@@ -674,50 +673,49 @@ export default function DailyPnLCalendar() {
               )}
               {monthlySummary.bestDay && (
                 <span className="flex items-center gap-1">
-                  <Trophy size={11} style={{ color: '#16a34a' }} />
+                  <Trophy size={10} style={{ color: '#16a34a' }} />
                   <span className="profit-text font-semibold">{compactPnL(monthlySummary.bestDay.value)}</span>
                   <span className="text-claude-subtle">{month + 1}/{monthlySummary.bestDay.day}</span>
                 </span>
               )}
               {monthlySummary.worstDay && (
                 <span className="flex items-center gap-1">
-                  <AlertTriangle size={11} style={{ color: '#dc2626' }} />
+                  <AlertTriangle size={10} style={{ color: '#dc2626' }} />
                   <span className="loss-text font-semibold">{compactPnL(monthlySummary.worstDay.value)}</span>
                   <span className="text-claude-subtle">{month + 1}/{monthlySummary.worstDay.day}</span>
                 </span>
               )}
             </div>
           </div>
-          {/* Metrics row */}
           <div className="flex">
-            <div className="flex-1 pr-5">
-              <p className="text-xs text-claude-muted mb-1">月度总盈亏</p>
+            <div className="flex-1 pr-4">
+              <p className="text-[11px] text-claude-muted mb-0.5">月度总盈亏</p>
               {histLoading && monthlyTotalPnL == null ? (
                 <p className="text-sm text-claude-muted animate-pulse">加载中…</p>
               ) : (
-                <p className={`text-2xl font-bold ${getPnLClass(monthlyTotalPnL)}`}>
+                <p className={`text-xl font-bold ${getPnLClass(monthlyTotalPnL)}`}>
                   {monthlyTotalPnL != null ? fmt.pnl(monthlyTotalPnL) : '—'}
                 </p>
               )}
-              <p className="text-xs text-claude-muted mt-1">已实现 + 未实现变动</p>
+              <p className="text-[11px] text-claude-muted mt-0.5">已实现 + 未实现变动</p>
             </div>
-            <div className="flex-1 px-5 border-l border-claude-border">
-              <p className="text-xs text-claude-muted mb-1">已实现</p>
-              <p className={`text-xl font-bold ${getPnLClass(monthlySummary.totalRealized)}`}>
+            <div className="flex-1 px-4 border-l border-claude-border">
+              <p className="text-[11px] text-claude-muted mb-0.5">已实现</p>
+              <p className={`text-lg font-bold ${getPnLClass(monthlySummary.totalRealized)}`}>
                 {monthlySummary.totalRealized !== 0 ? fmt.pnl(monthlySummary.totalRealized) : '—'}
               </p>
-              <p className="text-xs text-claude-muted mt-1">{monthlySummary.tradingDays} 个有数据日</p>
+              <p className="text-[11px] text-claude-muted mt-0.5">{monthlySummary.tradingDays} 个有数据日</p>
             </div>
-            <div className="flex-1 pl-5 border-l border-claude-border">
-              <p className="text-xs text-claude-muted mb-1">未实现变动</p>
+            <div className="flex-1 pl-4 border-l border-claude-border">
+              <p className="text-[11px] text-claude-muted mb-0.5">未实现变动</p>
               {histLoading && monthlyUnrealizedPnL == null ? (
                 <p className="text-sm text-claude-muted animate-pulse">加载中…</p>
               ) : (
-                <p className={`text-xl font-bold ${getPnLClass(monthlyUnrealizedPnL)}`}>
+                <p className={`text-lg font-bold ${getPnLClass(monthlyUnrealizedPnL)}`}>
                   {monthlyUnrealizedPnL != null ? fmt.pnl(monthlyUnrealizedPnL) : '—'}
                 </p>
               )}
-              <p className="text-xs text-claude-muted mt-1">月末 − 月初浮盈</p>
+              <p className="text-[11px] text-claude-muted mt-0.5">月末 − 月初浮盈</p>
             </div>
           </div>
         </div>
