@@ -354,13 +354,15 @@ function calcPortfolioMetrics(portfolio, prices, riskFreeRate = 0.05) {
   }, 0)
 
   const unrealizedPnL = stockUnrealizedPnL + optionUnrealizedPnL
-  const unrealizedPct = costBasis > 0 ? (unrealizedPnL / costBasis) * 100 : 0
+  // Use stock-only unrealized in numerator — option unrealized has no stock cost basis
+  const unrealizedPct = costBasis > 0 ? (stockUnrealizedPnL / costBasis) * 100 : 0
 
   const stockRealizedPnL = stocks.reduce((s, stock) => s + (stock.stockRealizedPnL ?? 0), 0)
   const optionRealizedPnL = closedOptions.reduce((s, o) => s + (o.realizedPnL ?? 0), 0)
   const realizedPnL = stockRealizedPnL + optionRealizedPnL
 
-  const totalValue = totalStockValue + cash
+  // Include option unrealized to match StockPositions' totalAssets formula
+  const totalValue = totalStockValue + cash + optionUnrealizedPnL
   const totalPnL = unrealizedPnL + realizedPnL
   const totalPnLPct = costBasis > 0 ? (totalPnL / costBasis) * 100 : 0
   // Stock-only total (cost-basis denominator is stocks only, so this % is meaningful)
@@ -704,7 +706,7 @@ export default function Dashboard({ setActiveTab }) {
 
     return {
       ...agg,
-      unrealizedPct:  agg.costBasis > 0 ? (agg.unrealizedPnL / agg.costBasis) * 100 : 0,
+      unrealizedPct:  agg.costBasis > 0 ? ((agg.stockUnrealizedPnL) / agg.costBasis) * 100 : 0,
       totalPnLPct:    agg.costBasis > 0 ? (agg.totalPnL / agg.costBasis) * 100 : 0,
       stockTotalPnL:  agg.stockUnrealizedPnL + agg.stockRealizedPnL,
       stockTotalPct:  agg.costBasis > 0 ? ((agg.stockUnrealizedPnL + agg.stockRealizedPnL) / agg.costBasis) * 100 : 0,

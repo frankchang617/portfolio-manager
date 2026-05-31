@@ -1,12 +1,38 @@
 # 投资组合管理系统 — 任务交接文档
 
-**更新日期**：2026-05-31（第四十三次，总览金额改精确显示 + 日历导航栏移位）  
+**更新日期**：2026-05-31（第四十五次，修复 totalValue 遗漏期权浮盈 + unrealizedPct 分子错误）  
 **技术栈**：React 18 + Vite + Tailwind CSS v3 + Recharts + Supabase  
 **运行地址**：http://localhost:5173（本地）/ https://frankchang617.github.io/portfolio-manager/（公网）
 
 ---
 
-## 最新状态（2026-05-31，第四十三次）✅
+## 最新状态（2026-05-31，第四十五次）✅
+
+### 修复总览 TOS F 总金额 & 股票收益率两处 bug（commit 待推送）
+
+**改动文件**：`src/components/Dashboard.jsx`
+
+**Bug 1 — 总金额与持仓管理不一致**
+
+| | 算法 |
+|---|---|
+| StockPositions `totalAssets` | `totalStockValue + cash + optionUnrealizedPnL` |
+| Dashboard `totalValue`（旧） | `totalStockValue + cash`（漏掉期权浮盈/亏） |
+| Dashboard `totalValue`（新） | `totalStockValue + cash + optionUnrealizedPnL` ✅ |
+
+**Bug 2 — 未实现收益率分子错误**
+
+`unrealizedPct` 旧算法：`(stockUnrealizedPnL + optionUnrealizedPnL) / stockCostBasis`  
+→ 分子含期权，分母只是股票成本，对期权账户（如 TOS F）严重失真
+
+`unrealizedPct` 新算法：`stockUnrealizedPnL / stockCostBasis`  
+→ 纯股票浮盈率，与 StockPositions 口径一致
+
+同步修 `totals` useMemo 的跨组合 `unrealizedPct`。
+
+---
+
+## 历史状态（2026-05-31，第四十三次）✅
 
 ### 总览金额改精确显示（commit `5a0cc1b`）
 
