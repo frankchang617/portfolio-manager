@@ -214,6 +214,107 @@ function calcMaxDrawdown(snapshots) {
   return maxDD * 100
 }
 
+// ── Per-portfolio performance metrics (calendar-consistent) ─────────────────
+function calcPortfolioPerf(portfolio, histPrices, livePrices) {
+  const todayStr   = new Date().toISOString().split('T')[0]
+  const curYear    = new Date().getFullYear()
+  const curMM      = String(new Date().getMonth() + 1).padStart(2, '0')
+  const monthStart = `${curYear}-${curMM}-01`
+  const ytdStart   = `${curYear}-01-01`
+  const histLoaded = Object.keys(histPrices).length > 0
+  const allP       = [portfolio]
+
+  const stockUnrealizedNow = (portfolio.stocks ?? []).reduce((s, stk) => {
+    if (stk.shares <= 0) return s
+    const p = livePrices[stk.symbol.toUpperCase()]?.price
+    return p != null ? s + (p - stk.avgCost) * stk.shares : s
+  }, 0)
+
+  // Portfolio value (stock market value + cash) at dateStr using Yahoo prices
+  const valueAt = (dateStr) => {
+    let v = 0, hasPrice = false
+    for (const s of portfolio.stocks ?? []) {
+      const price = histPrices[s.symbol.toUpperCase()]?.[dateStr]
+      if (!price) continue
+      const { shares } = positionAtDate(s, dateStr)
+      if (shares > 0) { v += shares * price; hasPrice = true }
+    }
+    return hasPrice ? v + cashAtDate(portfolio, dateStr) : null
+  }
+
+  // Last portfolio value strictly before targetDate
+  const lastBefore = (targetDate) => {
+    for (let back = 1; back <= 10; back++) {
+      const d = offsetDate(targetDate, -back)
+      if (d > todayStr) continue
+      const v = valueAt(d)
+      if (v != null) return v
+    }
+    return null
+  }
+
+  // Realized P&L (stock + option) within [from, to]
+  const realizedIn = (from, to) => {
+    let s = 0
+    for (const stk of portfolio.stocks ?? [])
+      for (const t of stk.transactions ?? [])
+        if (t.action === 'sell' && t.date >= from && t.date <= to && t.realizedPnL != null) s += t.realizedPnL
+    for (const o of portfolio.options ?? [])
+      if (o.status === 'closed' && o.closeDate >= from && o.closeDate <= to && o.realizedPnL != null) s += o.realizedPnL
+    return s
+  }
+
+  // ── Today ──
+  const todayStockPnL = histLoaded
+    ? getStockDailyPnL(allP, histPrices, livePrices, todayStr, todayStr)
+    : null
+  const todayOptRealized = (portfolio.options ?? [])
+    .filter(o => o.status === 'closed' && o.closeDate === todayStr && o.realizedPnL != null)
+    .reduce((s, o) => s + o.realizedPnL, 0)
+  // Fallback to Finnhub prev-close when hist not yet loaded
+  const todayFallback = (portfolio.stocks ?? []).reduce((s, stk) => {
+    const q = livePrices[stk.symbol.toUpperCase()]
+    return q?.price != null && q?.previousClose != null
+      ? s + (q.price - q.previousClose) * stk.shares : s
+  }, 0)
+  const todayPnL = (todayStockPnL ?? todayFallback) + todayOptRealized
+  const todayBase = histLoaded ? lastBefore(todayStr) : null
+  const todayPct  = todayBase ? (todayPnL / todayBase) * 100 : null
+
+  // ── Monthly ──
+  let startMonthUnr = 0
+  if (histLoaded) {
+    for (let back = 1; back <= 10; back++) {
+      const d = offsetDate(monthStart, -back)
+      if (d > todayStr) continue
+      const val = getUnrealizedAtDate(allP, histPrices, d)
+      if (val != null) { startMonthUnr = val; break }
+    }
+  }
+  const monthPnL = histLoaded
+    ? (stockUnrealizedNow - startMonthUnr) + realizedIn(monthStart, todayStr)
+    : null
+  const monthBase = histLoaded ? lastBefore(monthStart) : null
+  const monthPct  = monthBase && monthPnL != null ? (monthPnL / monthBase) * 100 : null
+
+  // ── YTD ──
+  let startYtdUnr = 0
+  if (histLoaded) {
+    for (let back = 1; back <= 10; back++) {
+      const d = offsetDate(ytdStart, -back)
+      const val = getUnrealizedAtDate(allP, histPrices, d)
+      if (val != null) { startYtdUnr = val; break }
+    }
+  }
+  const ytdPnL = histLoaded
+    ? (stockUnrealizedNow - startYtdUnr) + realizedIn(ytdStart, todayStr)
+    : null
+  const ytdBase = histLoaded ? lastBefore(ytdStart) : null
+  const ytdPct  = ytdBase && ytdPnL != null ? (ytdPnL / ytdBase) * 100 : null
+
+  return { todayPnL, todayPct, monthPnL, monthPct, ytdPnL, ytdPct }
+}
+
 // ── Per-portfolio metric calculator ─────────────────────────────────────────
 function calcPortfolioMetrics(portfolio, prices, riskFreeRate = 0.05) {
   const stocks = portfolio.stocks ?? []
@@ -353,10 +454,10 @@ function PerfCard({ label, pnl, pct, detail, loading }) {
 }
 
 // ── Portfolio card (grid item) ───────────────────────────────────────────────
-function PortfolioCard({ portfolio, metrics, snapshots, prices, isActive, onSelect }) {
-  const annualizedReturn = calcPortfolioIRR(portfolio, prices ?? {})
+function PortfolioCard({ portfolio, metrics, snapshots, perf, isActive, onSelect }) {
   const maxDrawdown = calcMaxDrawdown(snapshots)
-  const hasPerf = annualizedReturn !== null || maxDrawdown !== null
+  const pct = v => v != null ? fmt.pctChange(v) : '—'
+  const cls = v => v == null ? 'text-claude-muted' : v > 0 ? 'text-profit' : v < 0 ? 'text-loss' : 'text-claude-muted'
 
   return (
     <div
@@ -421,23 +522,45 @@ function PortfolioCard({ portfolio, metrics, snapshots, prices, isActive, onSele
         </div>
       </div>
 
-      {/* Performance metrics — visible once 2+ daily snapshots exist */}
-      {hasPerf && (
-        <div className="mt-3 pt-3 border-t border-gray-100 grid grid-cols-2 gap-x-4">
+      {/* Performance metrics */}
+      <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
+        {/* Row 1: 今日 / 本月 / 年初至今 */}
+        <div className="grid grid-cols-3 gap-x-3">
           <div>
-            <p className="text-xs text-claude-muted mb-0.5">年化收益</p>
-            <p className={`text-sm font-semibold font-mono ${annualizedReturn == null ? 'text-claude-muted' : annualizedReturn >= 0 ? 'text-profit' : 'text-loss'}`}>
-              {annualizedReturn != null ? fmt.pctChange(annualizedReturn) : '—'}
+            <p className="text-[10px] text-claude-muted mb-0.5">今日收益</p>
+            <p className={`text-xs font-semibold font-mono ${cls(perf?.todayPct)}`}>
+              {pct(perf?.todayPct)}
             </p>
           </div>
           <div>
-            <p className="text-xs text-claude-muted mb-0.5">最大回撤</p>
-            <p className={`text-sm font-semibold font-mono ${maxDrawdown == null || maxDrawdown === 0 ? 'text-claude-muted' : 'text-loss'}`}>
+            <p className="text-[10px] text-claude-muted mb-0.5">本月收益</p>
+            <p className={`text-xs font-semibold font-mono ${cls(perf?.monthPct)}`}>
+              {pct(perf?.monthPct)}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] text-claude-muted mb-0.5">年初至今</p>
+            <p className={`text-xs font-semibold font-mono ${cls(perf?.ytdPct)}`}>
+              {pct(perf?.ytdPct)}
+            </p>
+          </div>
+        </div>
+        {/* Row 2: 总收益 / 最大回撤 */}
+        <div className="grid grid-cols-2 gap-x-4">
+          <div>
+            <p className="text-[10px] text-claude-muted mb-0.5">总收益</p>
+            <p className={`text-xs font-semibold font-mono ${cls(metrics.totalPnLPct)}`}>
+              {fmt.pctChange(metrics.totalPnLPct)}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] text-claude-muted mb-0.5">最大回撤</p>
+            <p className={`text-xs font-semibold font-mono ${maxDrawdown == null || maxDrawdown === 0 ? 'text-claude-muted' : 'text-loss'}`}>
               {maxDrawdown != null ? (maxDrawdown > 0 ? `-${maxDrawdown.toFixed(1)}%` : '0.0%') : '—'}
             </p>
           </div>
         </div>
-      )}
+      </div>
     </div>
   )
 }
@@ -580,6 +703,15 @@ export default function Dashboard({ setActiveTab }) {
     }
     return map
   }, [state.portfolios])
+
+  // Per-portfolio performance metrics keyed by portfolio.id
+  const portfolioPerfs = useMemo(() => {
+    const result = {}
+    for (const { portfolio } of allMetrics) {
+      result[portfolio.id] = calcPortfolioPerf(portfolio, histPrices, prices)
+    }
+    return result
+  }, [allMetrics, histPrices, prices])
 
   // Reconstruct daily total asset value from transactions + Yahoo Finance hist prices.
   // Stock market value at date d = Σ(positionAtDate(stock, d).shares × price[d])
@@ -915,7 +1047,7 @@ export default function Dashboard({ setActiveTab }) {
               portfolio={portfolio}
               metrics={metrics}
               snapshots={state.portfolioSnapshots?.[portfolio.id]}
-              prices={prices}
+              perf={portfolioPerfs[portfolio.id]}
               isActive={portfolio.id === state.activePortfolioId}
               onSelect={() => {
                 dispatch({ type: 'SELECT_PORTFOLIO', id: portfolio.id })

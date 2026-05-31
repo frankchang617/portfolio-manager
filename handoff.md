@@ -1,12 +1,40 @@
 # 投资组合管理系统 — 任务交接文档
 
-**更新日期**：2026-05-31（第三十六次，性能卡片改用逐日市值法，与日历口径统一）  
+**更新日期**：2026-05-31（第三十七次，组合卡片年化收益改为今日/本月/YTD/总收益）  
 **技术栈**：React 18 + Vite + Tailwind CSS v3 + Recharts + Supabase  
 **运行地址**：http://localhost:5173（本地）/ https://frankchang617.github.io/portfolio-manager/（公网）
 
 ---
 
-## 最新状态（2026-05-31，第三十六次）✅
+## 最新状态（2026-05-31，第三十七次）✅
+
+### 组合卡片：年化收益 → 今日/本月/年初至今/总收益 + 保留最大回撤
+
+**改动文件**：`src/components/Dashboard.jsx`
+
+**新增 `calcPortfolioPerf(portfolio, histPrices, livePrices)` 模块函数**：
+- 单组合版本的逐日市值法，与跨组合 `performanceMetrics` 口径完全一致
+- 今日：`getStockDailyPnL([p])` + 今日期权已实现；histPrices 未加载时 fallback 到 Finnhub prevClose
+- 本月/YTD：`(当前股票浮盈 − 期初浮盈) + 期间已实现`；% 分母用该组合自己的 `valueAt()` 历史值
+- `valueAt(dateStr)` = 按 Yahoo Finance 重建的单组合总资产（股票市值 + `cashAtDate`）
+- `realizedIn(from, to)` = 股票 sell + 期权平仓已实现之和
+
+**新增 `portfolioPerfs` useMemo**（依赖 `allMetrics` / `histPrices` / `prices`）：
+- 按 `portfolio.id` 索引，为每张组合卡片提供独立计算结果
+
+**更新 `PortfolioCard` 组件**：
+- 移除 `calcPortfolioIRR` 调用（年化收益）
+- 新增 `perf` prop（来自 `portfolioPerfs[portfolio.id]`）
+- 性能区改为两行：
+  - 第一行（3列）：今日收益% / 本月收益% / 年初至今%
+  - 第二行（2列）：总收益% / 最大回撤（保留）
+- 数据未加载时显示 `—`，无加载骨架（整体卡片已有足够的结构）
+
+**验证**：`npx vite build` 通过。
+
+---
+
+## 历史状态（2026-05-31，第三十六次）✅
 
 ### 性能卡片改用逐日市值法，与日历口径完全统一
 
