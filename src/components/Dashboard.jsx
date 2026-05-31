@@ -65,6 +65,70 @@ function cashAtDate(portfolio, dateStr) {
   return Math.max(0, cash)
 }
 
+// ── Calendar-consistent P&L helpers ─────────────────────────────────────────
+// Same logic as DailyPnLCalendar so both pages show the same numbers.
+
+function offsetDate(dateStr, days) {
+  const d = new Date(dateStr + 'T12:00:00')
+  d.setDate(d.getDate() + days)
+  return d.toISOString().split('T')[0]
+}
+
+// Most recent trading-day close strictly before dateStr (scan back up to 10 days).
+function prevClosePrice(histPrices, sym, dateStr) {
+  const series = histPrices[sym]
+  if (!series) return null
+  for (let back = 1; back <= 10; back++) {
+    const d = offsetDate(dateStr, -back)
+    if (series[d] != null) return series[d]
+  }
+  return null
+}
+
+// Close on dateStr; for today use live Finnhub price.
+function closeOnDate(histPrices, livePrices, sym, dateStr, todayStr) {
+  if (dateStr === todayStr) return livePrices[sym]?.price ?? null
+  return histPrices[sym]?.[dateStr] ?? null
+}
+
+// Stock-only unrealized P&L at dateStr using Yahoo Finance histPrices.
+function getUnrealizedAtDate(portfolios, histPrices, dateStr) {
+  let total = 0; let hasData = false
+  for (const p of portfolios) {
+    for (const stock of p.stocks ?? []) {
+      const sym = stock.symbol.toUpperCase()
+      const price = histPrices[sym]?.[dateStr]
+      if (!price) continue
+      const { shares, avgCost } = positionAtDate(stock, dateStr)
+      if (shares > 0) { hasData = true; total += (price - avgCost) * shares }
+    }
+  }
+  return hasData ? total : null
+}
+
+// Mark-to-market daily stock P&L (equity-change form — same formula as Calendar).
+function getStockDailyPnL(portfolios, histPrices, livePrices, dateStr, todayStr) {
+  let total = 0; let hasData = false
+  const prevDay = offsetDate(dateStr, -1)
+  for (const p of portfolios) {
+    for (const stock of p.stocks ?? []) {
+      const sym = stock.symbol.toUpperCase()
+      const cToday = closeOnDate(histPrices, livePrices, sym, dateStr, todayStr)
+      const cPrev  = prevClosePrice(histPrices, sym, dateStr)
+      const sharesOpen = positionAtDate(stock, prevDay).shares
+      const todayTxns = (stock.transactions ?? []).filter(t => t.date === dateStr)
+      if (sharesOpen > 0 && cToday != null && cPrev != null) {
+        total += sharesOpen * (cToday - cPrev); hasData = true
+      }
+      for (const t of todayTxns) {
+        if (t.action === 'buy'  && cToday != null) { total += t.shares * (cToday - t.price); hasData = true }
+        if (t.action === 'sell' && cToday != null) { total += t.shares * (t.price - cToday); hasData = true }
+      }
+    }
+  }
+  return hasData ? total : null
+}
+
 // ── Performance statistics helpers ──────────────────────────────────────────
 
 // IRR via Newton-Raphson: cash flows = [{days, amount}], days from t0
@@ -494,6 +558,29 @@ export default function Dashboard({ setActiveTab }) {
     }
   }, [allMetrics])
 
+  // Realized P&L indexed by date — mirrors Calendar's dailyData structure.
+  const realizedMap = useMemo(() => {
+    const map = {}
+    for (const p of state.portfolios.filter(p => !p.isAggregate)) {
+      for (const s of p.stocks ?? []) {
+        for (const t of s.transactions ?? []) {
+          if (t.action === 'sell' && t.date && t.realizedPnL != null) {
+            if (!map[t.date]) map[t.date] = { total: 0, optionRealized: 0 }
+            map[t.date].total += t.realizedPnL
+          }
+        }
+      }
+      for (const o of p.options ?? []) {
+        if (o.status === 'closed' && o.closeDate && o.realizedPnL != null) {
+          if (!map[o.closeDate]) map[o.closeDate] = { total: 0, optionRealized: 0 }
+          map[o.closeDate].total += o.realizedPnL
+          map[o.closeDate].optionRealized += o.realizedPnL
+        }
+      }
+    }
+    return map
+  }, [state.portfolios])
+
   // Reconstruct daily total asset value from transactions + Yahoo Finance hist prices.
   // Stock market value at date d = Σ(positionAtDate(stock, d).shares × price[d])
   // Cash at date d = current cash reversed through all transactions after d.
@@ -562,30 +649,68 @@ export default function Dashboard({ setActiveTab }) {
     return result.length >= 2 ? result : null
   }, [state.portfolios, histPrices, prices])
 
+  // Performance cards — calendar-consistent (mark-to-market), same numbers as DailyPnLCalendar.
   const performanceMetrics = useMemo(() => {
-    const now = new Date()
-    const year = now.getFullYear()
-    const month = String(now.getMonth() + 1).padStart(2, '0')
-    const monthStart = `${year}-${month}-01`
-    const ytdStart   = `${year}-01-01`
+    const todayStr = new Date().toISOString().split('T')[0]
+    const curYear  = new Date().getFullYear()
+    const curMM    = String(new Date().getMonth() + 1).padStart(2, '0')
+    const monthStart = `${curYear}-${curMM}-01`
+    const ytdStart   = `${curYear}-01-01`
+    const allPortfolios = state.portfolios.filter(p => !p.isAggregate)
+    const histLoaded = Object.keys(histPrices).length > 0
 
-    const valueBeforeDate = (targetDate) => {
-      if (!historicalAssetData) return null
-      const before = historicalAssetData.filter(d => d.date < targetDate)
-      return before.length ? before[before.length - 1].totalValue : null
+    // Last historicalAssetData value strictly before targetDate → percentage denominator.
+    const baseValue = (targetDate) =>
+      historicalAssetData?.filter(d => d.date < targetDate).at(-1)?.totalValue ?? null
+
+    // ── Today (mark-to-market, consistent with Calendar) ──
+    const todayStockPnL = histLoaded
+      ? getStockDailyPnL(allPortfolios, histPrices, prices, todayStr, todayStr)
+      : null
+    const todayOptRealized = realizedMap[todayStr]?.optionRealized ?? 0
+    const todayPnL = (todayStockPnL ?? totals.todayPnL) + todayOptRealized
+    const todayBase = baseValue(todayStr)
+    const todayPct  = todayBase ? (todayPnL / todayBase) * 100 : totals.todayPct
+
+    // ── Monthly: unrealized change + realized this month ──
+    const stockUnrealizedNow = totals.stockUnrealizedPnL
+    let startMonthUnrealized = 0
+    if (histLoaded) {
+      for (let back = 1; back <= 10; back++) {
+        const d = offsetDate(monthStart, -back)
+        if (d > todayStr) continue
+        const val = getUnrealizedAtDate(allPortfolios, histPrices, d)
+        if (val != null) { startMonthUnrealized = val; break }
+      }
     }
+    const monthUnrealizedChange = histLoaded ? stockUnrealizedNow - startMonthUnrealized : null
+    const monthRealized = Object.entries(realizedMap)
+      .filter(([d]) => d >= monthStart && d <= todayStr)
+      .reduce((s, [, v]) => s + v.total, 0)
+    const monthPnL = monthUnrealizedChange != null ? monthUnrealizedChange + monthRealized : null
+    const monthBase = baseValue(monthStart)
+    const monthPct  = monthBase && monthPnL != null ? (monthPnL / monthBase) * 100 : null
 
-    const monthBase = valueBeforeDate(monthStart)
-    const ytdBase   = valueBeforeDate(ytdStart)
-    const cur = totals.totalValue
-
-    return {
-      monthPnL: monthBase != null ? cur - monthBase : null,
-      monthPct: monthBase     ? ((cur - monthBase) / monthBase) * 100 : null,
-      ytdPnL:   ytdBase != null ? cur - ytdBase   : null,
-      ytdPct:   ytdBase       ? ((cur - ytdBase)   / ytdBase)   * 100 : null,
+    // ── YTD: unrealized change + realized this year ──
+    let startYtdUnrealized = 0
+    if (histLoaded) {
+      for (let back = 1; back <= 10; back++) {
+        const d = offsetDate(ytdStart, -back)
+        const val = getUnrealizedAtDate(allPortfolios, histPrices, d)
+        if (val != null) { startYtdUnrealized = val; break }
+      }
     }
-  }, [historicalAssetData, totals.totalValue])
+    const ytdUnrealizedChange = histLoaded ? stockUnrealizedNow - startYtdUnrealized : null
+    const ytdRealized = Object.entries(realizedMap)
+      .filter(([d]) => d >= ytdStart && d <= todayStr)
+      .reduce((s, [, v]) => s + v.total, 0)
+    const ytdPnL = ytdUnrealizedChange != null ? ytdUnrealizedChange + ytdRealized : null
+    const ytdBase = baseValue(ytdStart)
+    const ytdPct  = ytdBase && ytdPnL != null ? (ytdPnL / ytdBase) * 100 : null
+
+    return { todayPnL, todayPct, monthPnL, monthPct, ytdPnL, ytdPct }
+  }, [state.portfolios, histPrices, prices, historicalAssetData, realizedMap,
+      totals.todayPnL, totals.todayPct, totals.stockUnrealizedPnL])
 
   const snapshotData = useMemo(() => {
     // Prefer reconstructed historical data; fall back to dailySnapshots
@@ -671,9 +796,10 @@ export default function Dashboard({ setActiveTab }) {
       <div className="grid grid-cols-4 gap-3">
         <PerfCard
           label="今日涨跌"
-          pnl={totals.todayPnL}
-          pct={totals.todayPct}
+          pnl={performanceMetrics.todayPnL}
+          pct={performanceMetrics.todayPct}
           detail="较昨日收盘"
+          loading={histLoading && Object.keys(histPrices).length === 0}
         />
         <PerfCard
           label="本月涨跌"

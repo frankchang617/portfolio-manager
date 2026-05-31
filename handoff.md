@@ -1,34 +1,34 @@
 # 投资组合管理系统 — 任务交接文档
 
-**更新日期**：2026-05-31（第三十五次，总览新增 4 张性能百分比卡片）  
+**更新日期**：2026-05-31（第三十六次，性能卡片改用逐日市值法，与日历口径统一）  
 **技术栈**：React 18 + Vite + Tailwind CSS v3 + Recharts + Supabase  
 **运行地址**：http://localhost:5173（本地）/ https://frankchang617.github.io/portfolio-manager/（公网）
 
 ---
 
-## 最新状态（2026-05-31，第三十五次）✅
+## 最新状态（2026-05-31，第三十六次）✅
 
-### 总览新增 4 张性能百分比卡片
+### 性能卡片改用逐日市值法，与日历口径完全统一
+
+**背景**：总览性能卡片原用「资产快照差值法」，与日历盈亏的逐日市值法口径不同，导致两页数字不一致。
 
 **改动文件**：`src/components/Dashboard.jsx`
 
-**新增 `PerfCard` 组件**（在 `MetricCard` 之后）：
-- 正收益：绿色渐变背景 (`from-emerald-50`) + 大号绿色 % + 右侧透明趋势箭头
-- 负收益：红色渐变背景 + 红色数字
-- 历史数据加载中时显示骨架动画（`animate-pulse`）
-- 主显示：大号 % (`text-3xl font-bold`)；次显示：金额 (`text-sm font-mono`)；辅助文字说明基数日期
+**新增模块级辅助函数**（与 DailyPnLCalendar 完全相同逻辑）：
+- `offsetDate` / `prevClosePrice` / `closeOnDate` / `getUnrealizedAtDate` / `getStockDailyPnL`
 
-**新增 `performanceMetrics` useMemo**（依赖 `historicalAssetData` + `totals.totalValue`）：
-- **今日涨跌**：`totals.todayPnL / totals.todayPct`，来自 Finnhub 实时价，与昨收比较，无需历史数据
-- **本月涨跌**：基数 = `historicalAssetData` 中最后一条 `date < monthStart` 的数据点，即上个月最后一个交易日收盘价
-- **年初至今**：基数 = 最后一条 `date < ytdStart` 的数据点，即去年最后一个交易日收盘价
-- **总收益率**：`totals.totalPnL / totals.totalPnLPct`，基于持仓成本（`costBasis`）
+**新增 `realizedMap` useMemo**：按日期汇总已实现盈亏（`{ total, optionRealized }`），供本月/YTD 累加。
 
-**布局**：4 张 PerfCard 放在顶部 `grid grid-cols-4 gap-3`，原有 7 张 MetricCard 横向滚动行保持不变在其下方。
+**重写 `performanceMetrics` useMemo**（新口径）：
+- **今日**：`getStockDailyPnL(today)` + 今日期权已实现；% 分母 = `historicalAssetData` 昨日总资产
+- **本月**：`(当前股票浮盈 − 月初浮盈) + 本月已实现`；% 分母 = 上月末总资产
+- **年初至今**：`(当前股票浮盈 − 年初浮盈) + 年内已实现`；% 分母 = 上年末总资产
+- **总收益率**：保持 `(未实现+已实现) / costBasis`（该口径本身正确）
+- histPrices 未加载时：今日 fallback 到 Finnhub todayPnL，本月/YTD 显示加载骨架
 
-**验证**：`npx vite build` 通过，浏览器截图确认布局正确。
+**第三十五次（同 session）**：新增 `PerfCard` 组件 + 4 张卡片置于总览顶部。
 
-**关键决策**：本月/年初至今的基数均取 Yahoo Finance 历史价中严格小于起始日的最后一条，天然对齐上个月/上年最后交易日，无需额外节假日处理。
+**关键决策**：月度/YTD「未实现变动」只计股票（无期权逐日价格），期权仅在平仓日计已实现，与日历完全一致。
 
 ---
 
