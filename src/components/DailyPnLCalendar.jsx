@@ -550,49 +550,6 @@ export default function DailyPnLCalendar() {
   return (
     <div className="space-y-3">
 
-      {/* Navigation bar */}
-      <div className="card p-3">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-1.5">
-            <button onClick={prevMonth}
-              className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-claude-muted hover:text-claude-text">
-              <ChevronLeft size={15} />
-            </button>
-            <h2 className="text-base font-bold text-claude-text min-w-[120px] text-center">
-              {year}年&nbsp;{MONTHS[month]}
-            </h2>
-            <button onClick={nextMonth}
-              className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-claude-muted hover:text-claude-text">
-              <ChevronRight size={15} />
-            </button>
-          </div>
-          <div className="flex items-center gap-1">
-            {availableYears.map(y => (
-              <button key={y} onClick={() => setYear(y)}
-                className={`px-2 py-1 rounded-lg text-xs font-medium transition-all ${
-                  year === y
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-claude-muted hover:bg-gray-100 hover:text-claude-text'
-                }`}>
-                {y}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="flex gap-1 flex-wrap">
-          {MONTHS.map((m, i) => (
-            <button key={i} onClick={() => setMonth(i)}
-              className={`px-2 py-1 rounded-lg text-xs font-medium transition-all ${
-                month === i
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-claude-muted hover:bg-gray-100 hover:text-claude-text'
-              }`}>
-              {m}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* Summary panels */}
       <div className="space-y-2">
 
@@ -720,6 +677,49 @@ export default function DailyPnLCalendar() {
           </div>
         </div>
 
+      </div>
+
+      {/* Navigation bar */}
+      <div className="card p-3">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-1.5">
+            <button onClick={prevMonth}
+              className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-claude-muted hover:text-claude-text">
+              <ChevronLeft size={15} />
+            </button>
+            <h2 className="text-base font-bold text-claude-text min-w-[120px] text-center">
+              {year}年&nbsp;{MONTHS[month]}
+            </h2>
+            <button onClick={nextMonth}
+              className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-claude-muted hover:text-claude-text">
+              <ChevronRight size={15} />
+            </button>
+          </div>
+          <div className="flex items-center gap-1">
+            {availableYears.map(y => (
+              <button key={y} onClick={() => setYear(y)}
+                className={`px-2 py-1 rounded-lg text-xs font-medium transition-all ${
+                  year === y
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-claude-muted hover:bg-gray-100 hover:text-claude-text'
+                }`}>
+                {y}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex gap-1 flex-wrap">
+          {MONTHS.map((m, i) => (
+            <button key={i} onClick={() => setMonth(i)}
+              className={`px-2 py-1 rounded-lg text-xs font-medium transition-all ${
+                month === i
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-claude-muted hover:bg-gray-100 hover:text-claude-text'
+              }`}>
+              {m}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Stock calendar */}
