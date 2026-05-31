@@ -116,6 +116,15 @@ function offsetDate(dateStr, days) {
   return d.toISOString().split('T')[0]
 }
 
+// Background color: green/red by daily P&L sign, intensity by magnitude.
+function getCellBg(pnl) {
+  if (pnl == null || pnl === 0) return null
+  const abs = Math.abs(pnl)
+  const intensity = Math.min(abs / 2000, 1)
+  const alpha = Math.round((0.10 + intensity * 0.5) * 255).toString(16).padStart(2, '0')
+  return pnl > 0 ? `#16a34a${alpha}` : `#dc2626${alpha}`
+}
+
 // ── Reusable calendar grid ───────────────────────────────────────────────────
 // getCell(dayObj) => { pnl, lines:[{text,cls}], dot, hoverItems:[{label,value}] }
 function CalendarGrid({ title, calendarDays, getCell, monthlyPnL, loading, todayStr, dotLegend }) {
@@ -526,15 +535,6 @@ export default function DailyPnLCalendar() {
   const nextMonth = () => {
     if (month === 11) { setMonth(0); setYear(y => y + 1) }
     else setMonth(m => m + 1)
-  }
-
-  // Background color: green/red by daily P&L sign, intensity by magnitude.
-  function getCellBg(pnl) {
-    if (pnl == null || pnl === 0) return null
-    const abs = Math.abs(pnl)
-    const intensity = Math.min(abs / 2000, 1)
-    const alpha = Math.round((0.10 + intensity * 0.5) * 255).toString(16).padStart(2, '0')
-    return pnl > 0 ? `#16a34a${alpha}` : `#dc2626${alpha}`
   }
 
   // Daily display: stock mark-to-market (that day's price action) + option realized lump.
