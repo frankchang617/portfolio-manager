@@ -1,12 +1,37 @@
 # 投资组合管理系统 — 任务交接文档
 
-**更新日期**：2026-05-31（第三十七次，组合卡片年化收益改为今日/本月/YTD/总收益）  
+**更新日期**：2026-05-31（第三十八次，股票/期权盈亏分离显示）  
 **技术栈**：React 18 + Vite + Tailwind CSS v3 + Recharts + Supabase  
 **运行地址**：http://localhost:5173（本地）/ https://frankchang617.github.io/portfolio-manager/（公网）
 
 ---
 
-## 最新状态（2026-05-31，第三十七次）✅
+## 最新状态（2026-05-31，第三十八次）✅
+
+### 股票/期权盈亏分离显示，修复总收益率虚高问题
+
+**背景**：`totalPnLPct = (未实现+已实现) / costBasis` 中，分母 `costBasis` 只含当前持股成本，但分子包含期权历史已实现盈亏和股票历史卖出盈亏，造成期权为主的组合（如 TOS F）收益率虚高。
+
+**改动文件**：`src/components/Dashboard.jsx`
+
+**`calcPortfolioMetrics` 新增三个返回字段**：
+- `stockTotalPnL = stockUnrealizedPnL + stockRealizedPnL`
+- `stockTotalPct = stockTotalPnL / costBasis`（分子分母口径一致，有意义的百分比）
+- `optionTotalPnL = optionUnrealizedPnL + optionRealizedPnL`（仅展示金额，无成本基准）
+
+**`totals` useMemo** 同步新增 `stockTotalPnL` / `stockTotalPct` / `optionTotalPnL`。
+
+**`PortfolioCard` Row 2 自适应布局**：
+- 有期权收益（`optionTotalPnL ≠ 0`）→ 3 列：股票收益% / 期权收益$ / 最大回撤
+- 无期权 → 2 列：总收益% / 最大回撤
+
+**顶部 PerfCard**：「总收益率」改为「股票收益率」，detail 附注期权收益金额（若有）。
+
+**关键决策**：期权 P&L 只展示绝对金额，不计算百分比（无有意义的成本基准）；股票百分比使用当前持仓成本作分母，口径清晰。
+
+---
+
+## 历史状态（2026-05-31，第三十七次）✅
 
 ### 组合卡片：年化收益 → 今日/本月/年初至今/总收益 + 保留最大回撤
 

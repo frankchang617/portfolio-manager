@@ -363,6 +363,11 @@ function calcPortfolioMetrics(portfolio, prices, riskFreeRate = 0.05) {
   const totalValue = totalStockValue + cash
   const totalPnL = unrealizedPnL + realizedPnL
   const totalPnLPct = costBasis > 0 ? (totalPnL / costBasis) * 100 : 0
+  // Stock-only total (cost-basis denominator is stocks only, so this % is meaningful)
+  const stockTotalPnL = stockUnrealizedPnL + stockRealizedPnL
+  const stockTotalPct = costBasis > 0 ? (stockTotalPnL / costBasis) * 100 : 0
+  // Option total P&L (no meaningful cost-basis %, show as amount only)
+  const optionTotalPnL = optionUnrealizedPnL + optionRealizedPnL
   const todayPnL = enriched.reduce((s, r) => s + r.todayPnL, 0)
   const todayPct = totalStockValue > 0 ? (todayPnL / totalStockValue) * 100 : 0
   const holdingsCount = stocks.filter(s => s.shares > 0).length
@@ -372,6 +377,7 @@ function calcPortfolioMetrics(portfolio, prices, riskFreeRate = 0.05) {
     stockUnrealizedPnL, optionUnrealizedPnL, unrealizedPnL, unrealizedPct,
     stockRealizedPnL, optionRealizedPnL, realizedPnL,
     totalPnL, totalPnLPct,
+    stockTotalPnL, stockTotalPct, optionTotalPnL,
     todayPnL, todayPct,
     holdingsCount, openOptionsCount, costBasis,
   }
@@ -545,21 +551,44 @@ function PortfolioCard({ portfolio, metrics, snapshots, perf, isActive, onSelect
             </p>
           </div>
         </div>
-        {/* Row 2: 总收益 / 最大回撤 */}
-        <div className="grid grid-cols-2 gap-x-4">
-          <div>
-            <p className="text-[10px] text-claude-muted mb-0.5">总收益</p>
-            <p className={`text-xs font-semibold font-mono ${cls(metrics.totalPnLPct)}`}>
-              {fmt.pctChange(metrics.totalPnLPct)}
-            </p>
+        {/* Row 2: 股票收益% [期权收益$] 最大回撤 */}
+        {metrics.optionTotalPnL !== 0 ? (
+          <div className="grid grid-cols-3 gap-x-3">
+            <div>
+              <p className="text-[10px] text-claude-muted mb-0.5">股票收益</p>
+              <p className={`text-xs font-semibold font-mono ${cls(metrics.stockTotalPct)}`}>
+                {fmt.pctChange(metrics.stockTotalPct)}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] text-claude-muted mb-0.5">期权收益</p>
+              <p className={`text-xs font-semibold font-mono ${cls(metrics.optionTotalPnL)}`}>
+                {fmt.pnl(metrics.optionTotalPnL)}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] text-claude-muted mb-0.5">最大回撤</p>
+              <p className={`text-xs font-semibold font-mono ${maxDrawdown == null || maxDrawdown === 0 ? 'text-claude-muted' : 'text-loss'}`}>
+                {maxDrawdown != null ? (maxDrawdown > 0 ? `-${maxDrawdown.toFixed(1)}%` : '0.0%') : '—'}
+              </p>
+            </div>
           </div>
-          <div>
-            <p className="text-[10px] text-claude-muted mb-0.5">最大回撤</p>
-            <p className={`text-xs font-semibold font-mono ${maxDrawdown == null || maxDrawdown === 0 ? 'text-claude-muted' : 'text-loss'}`}>
-              {maxDrawdown != null ? (maxDrawdown > 0 ? `-${maxDrawdown.toFixed(1)}%` : '0.0%') : '—'}
-            </p>
+        ) : (
+          <div className="grid grid-cols-2 gap-x-4">
+            <div>
+              <p className="text-[10px] text-claude-muted mb-0.5">总收益</p>
+              <p className={`text-xs font-semibold font-mono ${cls(metrics.stockTotalPct)}`}>
+                {fmt.pctChange(metrics.stockTotalPct)}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] text-claude-muted mb-0.5">最大回撤</p>
+              <p className={`text-xs font-semibold font-mono ${maxDrawdown == null || maxDrawdown === 0 ? 'text-claude-muted' : 'text-loss'}`}>
+                {maxDrawdown != null ? (maxDrawdown > 0 ? `-${maxDrawdown.toFixed(1)}%` : '0.0%') : '—'}
+              </p>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   )
@@ -675,9 +704,12 @@ export default function Dashboard({ setActiveTab }) {
 
     return {
       ...agg,
-      unrealizedPct: agg.costBasis > 0 ? (agg.unrealizedPnL / agg.costBasis) * 100 : 0,
-      totalPnLPct:   agg.costBasis > 0 ? (agg.totalPnL / agg.costBasis) * 100 : 0,
-      todayPct:      agg.totalStockValue > 0 ? (agg.todayPnL / agg.totalStockValue) * 100 : 0,
+      unrealizedPct:  agg.costBasis > 0 ? (agg.unrealizedPnL / agg.costBasis) * 100 : 0,
+      totalPnLPct:    agg.costBasis > 0 ? (agg.totalPnL / agg.costBasis) * 100 : 0,
+      stockTotalPnL:  agg.stockUnrealizedPnL + agg.stockRealizedPnL,
+      stockTotalPct:  agg.costBasis > 0 ? ((agg.stockUnrealizedPnL + agg.stockRealizedPnL) / agg.costBasis) * 100 : 0,
+      optionTotalPnL: agg.optionUnrealizedPnL + agg.optionRealizedPnL,
+      todayPct:       agg.totalStockValue > 0 ? (agg.todayPnL / agg.totalStockValue) * 100 : 0,
     }
   }, [allMetrics])
 
@@ -948,10 +980,12 @@ export default function Dashboard({ setActiveTab }) {
           loading={histLoading && historicalAssetData == null}
         />
         <PerfCard
-          label="总收益率"
-          pnl={totals.totalPnL}
-          pct={totals.totalPnLPct}
-          detail={`基于持仓成本 ${fmt.large(totals.costBasis)}`}
+          label="股票收益率"
+          pnl={totals.stockTotalPnL}
+          pct={totals.stockTotalPct}
+          detail={totals.optionTotalPnL !== 0
+            ? `期权收益 ${fmt.pnl(totals.optionTotalPnL)}`
+            : `基于持仓成本 ${fmt.large(totals.costBasis)}`}
         />
       </div>
 
