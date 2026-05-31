@@ -477,7 +477,7 @@ function PortfolioCard({ portfolio, metrics, snapshots, perf, isActive, onSelect
       <div className="flex items-start justify-between mb-4">
         <div className="min-w-0 flex-1 pr-2">
           <p className="text-xs text-claude-muted font-medium mb-0.5 truncate">{portfolio.name}</p>
-          <p className="text-2xl font-bold text-claude-text">{fmt.large(metrics.totalValue)}</p>
+          <p className="text-2xl font-bold text-claude-text">{fmt.currency(metrics.totalValue)}</p>
         </div>
         <div className={`text-right flex-shrink-0 ${metrics.todayPnL >= 0 ? 'text-profit' : 'text-loss'}`}>
           <div className="flex items-center gap-1 justify-end">
@@ -629,7 +629,7 @@ function SnapshotTooltip({ active, payload, label }) {
       <div className="space-y-1">
         <div className="flex justify-between gap-4">
           <span className="text-claude-muted">总资产</span>
-          <span className="font-medium text-claude-text">{fmt.large(d?.totalValue)}</span>
+          <span className="font-medium text-claude-text">{fmt.currency(d?.totalValue)}</span>
         </div>
         <div className="flex justify-between gap-4">
           <span className="text-claude-muted">总盈亏</span>
@@ -917,8 +917,8 @@ export default function Dashboard({ setActiveTab }) {
   const realizedPct      = totals.costBasis > 0 ? (totals.realizedPnL / totals.costBasis) * 100 : 0
 
   const metricCards = [
-    { emoji: '🌐', label: '跨组合总资产', value: fmt.large(totals.totalValue), highlight: true },
-    { emoji: '📈', label: '股票持仓总值', value: fmt.large(totals.totalStockValue) },
+    { emoji: '🌐', label: '跨组合总资产', value: fmt.currency(totals.totalValue), highlight: true },
+    { emoji: '📈', label: '股票持仓总值', value: fmt.currency(totals.totalStockValue) },
     { emoji: '💵', label: '总现金',       value: fmt.currency(totals.cash) },
     {
       emoji: '📊', label: '未实现盈亏',
@@ -985,7 +985,7 @@ export default function Dashboard({ setActiveTab }) {
           pct={totals.stockTotalPct}
           detail={totals.optionTotalPnL !== 0
             ? `期权收益 ${fmt.pnl(totals.optionTotalPnL)}`
-            : `基于持仓成本 ${fmt.large(totals.costBasis)}`}
+            : `基于持仓成本 ${fmt.currency(totals.costBasis)}`}
         />
       </div>
 
