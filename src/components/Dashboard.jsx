@@ -558,8 +558,8 @@ function PortfolioCard({ portfolio, metrics, snapshots, perf, isActive, onSelect
           <div className="grid grid-cols-3 gap-x-3">
             <div>
               <p className="text-[10px] text-claude-muted mb-0.5">股票收益</p>
-              <p className={`text-xs font-semibold font-mono ${cls(metrics.stockTotalPct)}`}>
-                {fmt.pctChange(metrics.stockTotalPct)}
+              <p className={`text-xs font-semibold font-mono ${cls(metrics.unrealizedPct)}`}>
+                {fmt.pctChange(metrics.unrealizedPct)}
               </p>
             </div>
             <div>

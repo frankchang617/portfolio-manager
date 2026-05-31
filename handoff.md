@@ -1,8 +1,31 @@
 # 投资组合管理系统 — 任务交接文档
 
-**更新日期**：2026-05-31（第四十五次，修复 totalValue 遗漏期权浮盈 + unrealizedPct 分子错误）  
+**更新日期**：2026-05-31（第四十六次，修复 TOS F 组合卡片股票收益百分比虚高）  
 **技术栈**：React 18 + Vite + Tailwind CSS v3 + Recharts + Supabase  
 **运行地址**：http://localhost:5173（本地）/ https://frankchang617.github.io/portfolio-manager/（公网）
+
+---
+
+## 最新状态（2026-05-31，第四十六次）✅
+
+### 修复 TOS F 组合卡片「股票收益」百分比虚高
+
+**改动文件**：`src/components/Dashboard.jsx`（`PortfolioCard` 组件，第 562 行）
+
+**根因**：含期权的组合卡片（如 TOS F）Row 2「股票收益」显示 `stockTotalPct`：
+- 分子 = `stockUnrealizedPnL + stockRealizedPnL`（当前浮盈 + **历史所有**已实现）
+- 分母 = `costBasis`（**仅当前持仓**成本）
+- TOS F 因大量期权策略产生了可观的股票已实现盈亏，分母相对极小，百分比虚高数倍
+
+**修复**：改为显示 `unrealizedPct = stockUnrealizedPnL / costBasis`
+
+| | 旧 | 新 |
+|---|---|---|
+| 分子 | `unrealized + realized`（跨历史） | `unrealized`（仅当前持仓） |
+| 分母 | `costBasis`（当前持仓） | `costBasis`（当前持仓） |
+| 口径 | 不一致，虚高 | 一致，与其他纯股票组合等效 |
+
+**一致性**：其他纯股票组合（无大量卖出）的 `stockTotalPct ≈ unrealizedPct`（因 realized ≈ 0），改后 TOS F 与其口径统一。已实现股票盈亏已在卡片上方「已实现盈亏」格展示，信息无丢失。
 
 ---
 
@@ -230,147 +253,11 @@
 
 ---
 
-## 历史状态（2026-05-29，第三十三次）✅
-
-### 走势图最后一天数据骤降修复
-
-**问题**：走势图最后一天（今天）总资产从 ~$44K 骤降到 ~$24K，与卡片 $48.19K 不符。
-
-**根因**：`historicalAssetData` useMemo 把今天也纳入 Yahoo Finance 历史价格范围（`date <= todayStr`）。Yahoo Finance 历史 API 对今天只有**部分股票**有数据（尚未收盘），导致只计算了部分持仓。
-
-**修复（`src/components/Dashboard.jsx`）**：
-1. 历史数据范围改为 `date <= yesterdayStr`（排除今天）
-2. 今天单独用 **Finnhub 实时价格**（`prices[sym]?.price`）计算，追加为最后一个数据点
-3. `useMemo` 依赖数组新增 `prices`
-
-**效果**：走势图末尾点与卡片总资产口径一致（都用 Finnhub 实时价格）。
-
----
-
-## 历史状态（2026-05-29，第三十二次）✅
-
-### 走势图移除期权内在价值调整
-
-**问题背景**：用户发现走势图末尾总资产 ≠ 跨组合总资产卡片，排查出三个原因：
-1. 价格来源不同（Yahoo Finance 历史 vs Finnhub 实时）
-2. 走势图对期权计算了内在价值（买方加、卖方减），卡片 `totalValue` 不含此项
-3. 日期不同（走势图末尾是上一交易日，卡片是今日实时）
-
-**修改**：删除 `historicalAssetData` useMemo 中期权内在价值调整的整段代码（原 Dashboard.jsx ~497-510 行），走势图仅保留：股票市值 + `cashAtDate`（含期权现金流逆推）。
-
-**决策**：期权不作为资产/负债计入走势图，与卡片口径一致（股票 + 现金）。
-
----
-
-## 历史状态（2026-05-29，第三十次）✅
-
-### 总览资产走势图：从最早交易记录日期开始绘制（commit `db8defb`）
-
-**改动（`src/components/Dashboard.jsx`）**：
-
-新增两个模块级辅助函数：
-- `positionAtDate(stock, targetDate)`：重放交易记录，返回指定日期的持仓数量
-- `cashAtDate(portfolio, dateStr)`：从当前 `portfolio.cash` 倒推，逆向还原历史日期的现金余额（undo 之后的买入/卖出）
-
-新增组件内 state 与 effect：
-- `histPrices` state + `fetchedSymbols` ref + useEffect，对所有非聚合组合的股票批量拉取 Yahoo Finance 5 年历史价格（与 DailyPnLCalendar 共享同一 localStorage 缓存 `yf_hist_v1`）
-
-新增 `historicalAssetData` useMemo：
-- 找出所有组合中最早的交易日期作为起点
-- 遍历 histPrices 中所有有数据的交易日
-- 每天总资产 = Σ 股票(持仓数 × 当日收盘价) + Σ 组合(历史现金)
-- 过滤掉 totalValue = 0 的天
-
-更新 `snapshotData` useMemo：
-- 优先用 `historicalAssetData`；未加载完成时 fallback 到原 `state.dailySnapshots`
-
-图表空状态：
-- 加载中：「加载历史价格数据中…」(animate-pulse)
-- 无数据：「暂无足够数据显示走势图」
-
----
-
-## 历史状态（2026-05-29，第二十九次）✅
-
-### 日历格子区分股票/期权已实现盈亏（commit `8e68995`，已推送）
-
-**改动**：
-- `dailyData` 新增 `stockRealized`、`optionRealized` 字段（`realized` 保留为两者之和）
-- 格子显示：同一天同时有股票和期权已实现盈亏时，分两行显示「股 ±$X」/ 「期 ±$X」；只有一种时维持原样
-- Hover tooltip：同样区分「股票已实现」/ 「期权已实现」标签，只有一种时自动识别标签名称
-
----
-
-## 历史状态（2026-05-29，第二十八次）✅
-
-### 日历盈亏页面全面重构（commit `eebeaac`，已推送）
-
-#### 核心逻辑修正
-
-| 项目 | 修改前（错误） | 修改后（正确） |
-|------|-------------|-------------|
-| 每日格子数值 | `unrealized[d]`（从买入成本算起的累计浮盈） | `unrealized[d] - unrealized[d-1]`（当天实际盈亏变动） |
-| 今日格子 | 累计浮盈 | `实时浮盈 - 昨日收盘浮盘` |
-| 月度未实现 | 月末快照绝对值 | `月末浮盈 - 月初浮盈`（月内净变动） |
-
-#### 新增汇总卡片（6 张，2 行）
-
-**第一行 — 全时段：**
-- 总已实现盈亏（历史所有 realized 汇总）
-- 总未实现盈亏（当前持仓实时浮盈）
-- 总盈亏 = 总已实现 + 总未实现
-
-**第二行 — 年初至今：**
-- 年初至今已实现
-- 年初至今未实现（当前持仓实时浮盈）
-- 年初至今总盈亏 = 前两者之和
-
-#### 技术实现要点
-
-**`getUnrealizedAtDate(portfolios, histPrices, dateStr)`**（新辅助函数）
-- 替代旧的 `calcUnrealizedAtDate`
-- 返回 `null`（无价格数据，如周末/假日）或数值（有数据）
-- 通过 `hasData` flag 区分「真正的 0」vs「无数据」
-
-**`calendarDays` useMemo 重构**
-- 内部 cache `{}` 避免对同一 dateStr 重复调用 `getUnrealizedAtDate`
-- `getPrevSnapshot(dateStr)`：向前最多找 7 天，返回最近有数据的快照值
-- 每日 `dailyUnrealizedChange = snapshot[d] - prevSnapshot[d]`
-- 今日特殊处理：`currentUnrealizedPnL - prevSnapshot`（用实时价格）
-
-**依赖顺序调整**
-- `currentUnrealizedPnL` useMemo 移至 `calendarDays` 之前，因为 calendarDays 需要在今日分支中引用它
-
-**月度未实现改为月度变动**
-- 月末：从该月最后一天倒推，找到最后有价格数据的日期
-- 月初：从当月 1 日前推最多 10 天，找到上月最后交易日快照
-- 月度变动 = 月末快照 - 月初快照
-
-**月度胜率改进**
-- 原来只统计有 realized 交易的天数
-- 现在统计所有 `dailyPnL（realized + unrealized变动）≠ 0` 的天数
-
----
-
-## 已完成的功能（第二十七次，commit `c229141`）
-
-- 顶部卡片：「{year}年已实现」→「年初至今未实现盈亏」
-- 月度卡片：「月末未实现」→「月度未实现」，新增「月度总盈亏」
-- `getPnlDisplay`：改为返回 realized + unrealized 之和（非优先取一个）
-
----
-
 ## 已完成的功能（第二十六次，commit `e64e946` / `98e26fb` / `6f7509d`）
 
 - **IRR 年化收益**（Dashboard.jsx）：Newton-Raphson MWRR，替代 CAGR 快照方案
 - **Yahoo Finance 历史价格 API**（src/utils/api.js）：`fetchHistoricalPrices`，CORS 代理 + localStorage 24h 缓存
 - **历史价格接入日历**（DailyPnLCalendar.jsx）：positionAtDate 重放交易，calcUnrealizedAtDate 汇总
-
----
-
-## 已完成的功能（第二十四次，commit `96b6cda` / `41be541`）
-
-- 修复：打开网站 ~60s 后才显示价格（HYDRATE reducer 清空 prices 问题）
 
 ---
 
