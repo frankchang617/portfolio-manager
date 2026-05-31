@@ -1,12 +1,33 @@
 # 投资组合管理系统 — 任务交接文档
 
-**更新日期**：2026-05-31（第四十次，修复日历白屏 bug）  
+**更新日期**：2026-05-31（第四十一次，日历界面整体压缩）  
 **技术栈**：React 18 + Vite + Tailwind CSS v3 + Recharts + Supabase  
 **运行地址**：http://localhost:5173（本地）/ https://frankchang617.github.io/portfolio-manager/（公网）
 
 ---
 
-## 最新状态（2026-05-31，第四十次）✅
+## 最新状态（2026-05-31，第四十一次）✅
+
+### 日历盈亏界面整体压缩（commit `2feb92b`）
+
+**改动文件**：`src/components/DailyPnLCalendar.jsx`
+
+| 位置 | 改前 | 改后 |
+|------|------|------|
+| 整体间距 | `space-y-5` | `space-y-3` |
+| 各卡片内边距 | `p-5` | `p-3` / `p-4` |
+| 导航按钮 | `px-3 py-1.5 text-sm` | `px-2 py-1 text-xs` |
+| 导航标题 | `text-xl` | `text-base` |
+| 汇总卡片主数字 | `text-2xl` / `text-xl` | `text-xl` / `text-lg` |
+| 汇总卡片副标签 | `text-xs mb-1 mt-1` | `text-[11px] mb-0.5 mt-0.5` |
+| 汇总卡片分栏间距 | `px-5 pr-5 pl-5` | `px-4 pr-4 pl-4` |
+| CalendarGrid 格子 | `min-h-[64px] gap-1.5 py-2` | `min-h-[52px] gap-1 py-1.5` |
+| CalendarGrid 图例 | `gap-5 mt-4 pt-4` | `gap-3 mt-2 pt-2` |
+| CalendarGrid 图例色块 | `w-4 h-4` | `w-3 h-3` |
+
+---
+
+## 历史状态（2026-05-31，第四十次）✅
 
 ### 修复日历盈亏白屏 bug（commit `2fd5205`）
 
