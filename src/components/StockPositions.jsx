@@ -334,6 +334,7 @@ export default function StockPositions() {
                 { field: 'totalPnL',    label: '总盈亏' },
                 { field: 'totalPnLPct', label: '总盈亏%' },
                 { field: 'paperPnL',         label: '账面盈亏' },
+                { field: 'costBasis',        label: '成本持仓' },
                 { field: 'marketValue',      label: '持仓价值' },
                 { field: 'stockRealizedPnL', label: '已实现盈亏' },
                 { field: 'allocation',       label: '占比 %' },
@@ -376,7 +377,7 @@ export default function StockPositions() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-claude-border bg-gray-50/50">
-                  {['代码','价格','今日涨跌','今日盈亏','数量','平均成本','持仓价值','每股盈亏','账面盈亏','已实现盈亏','账面盈亏%','总盈亏','总盈亏%','占比 %', ...(!isAggregate ? ['操作'] : [])].map(h => (
+                  {['代码','价格','今日涨跌','今日盈亏','数量','平均成本','成本持仓','持仓价值','每股盈亏','账面盈亏','已实现盈亏','账面盈亏%','总盈亏','总盈亏%','占比 %', ...(!isAggregate ? ['操作'] : [])].map(h => (
                     <th key={h} className={`text-xs font-semibold text-claude-subtle uppercase tracking-wide py-3 px-4 whitespace-nowrap ${h === '代码' ? 'text-left' : 'text-right'}`}>
                       {h}
                     </th>
@@ -434,6 +435,8 @@ export default function StockPositions() {
                     <td className="py-3.5 px-4 text-right text-sm font-mono">{s.shares.toFixed(2)}</td>
                     {/* 平均成本 */}
                     <td className="py-3.5 px-4 text-right text-sm font-mono">{fmt.currency(s.avgCost)}</td>
+                    {/* 成本持仓 */}
+                    <td className="py-3.5 px-4 text-right text-sm font-mono">{fmt.currency(s.costBasis)}</td>
                     {/* 持仓价值 */}
                     <td className="py-3.5 px-4 text-right text-sm font-mono font-medium">{fmt.currency(s.marketValue)}</td>
                     {/* 每股盈亏 */}
@@ -490,7 +493,7 @@ export default function StockPositions() {
                   <td className="py-3.5 px-4">
                     <span className="text-sm font-medium text-claude-muted">现金余额</span>
                   </td>
-                  <td colSpan={5} className="py-3.5 px-4 text-right text-claude-subtle text-sm">—</td>
+                  <td colSpan={6} className="py-3.5 px-4 text-right text-claude-subtle text-sm">—</td>
                   <td className="py-3.5 px-4 text-right text-sm font-mono font-semibold text-claude-text">
                     {fmt.currency(sourceCash)}
                   </td>
