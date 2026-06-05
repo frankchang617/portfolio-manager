@@ -438,7 +438,7 @@ export default function StockPositions() {
                     {/* 成本持仓 */}
                     <td className="py-3.5 px-4 text-right text-sm font-mono">{fmt.currency(s.costBasis)}</td>
                     {/* 持仓价值 */}
-                    <td className="py-3.5 px-4 text-right text-sm font-mono font-medium">{fmt.currency(s.marketValue)}</td>
+                    <td className={`py-3.5 px-4 text-right text-sm font-mono font-medium ${getPnLClass(s.isCleared ? null : s.marketValue - s.costBasis)}`}>{fmt.currency(s.marketValue)}</td>
                     {/* 每股盈亏 */}
                     <td className={`py-3.5 px-4 text-right text-sm font-mono ${getPnLClass(s.perSharePnL)}`}>
                       {s.perSharePnL != null ? fmt.pnl(s.perSharePnL) : '—'}

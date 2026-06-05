@@ -1,12 +1,29 @@
 # 投资组合管理系统 — 任务交接文档
 
-**更新日期**：2026-06-05（第四十七次，持仓明细新增「成本持仓」列）  
+**更新日期**：2026-06-05（第四十八次，持仓价值列按盈亏着色）  
 **技术栈**：React 18 + Vite + Tailwind CSS v3 + Recharts + Supabase  
 **运行地址**：http://localhost:5173（本地）/ https://frankchang617.github.io/portfolio-manager/（公网）
 
 ---
 
-## 最新状态（2026-06-05，第四十七次）✅
+## 最新状态（2026-06-05，第四十八次）✅
+
+### 持仓明细表「持仓价值」列按盈亏着色
+
+**改动文件**：`src/components/StockPositions.jsx`
+
+**需求**：持仓价值 > 成本持仓 显示绿色，< 显示红色。
+
+**实现**：
+- 「持仓价值」单元格 className 改用 `getPnLClass(s.isCleared ? null : s.marketValue - s.costBasis)`
+- 绿色 = 浮盈、红色 = 浮亏、灰色 = 相等/价格未加载/已清仓
+- 逻辑上 `marketValue − costBasis` 即账面盈亏，故颜色与右侧「账面盈亏」列严格一致
+
+**验证**：`npx vite build` 通过；Playwright 实测表头顺序正确，BOXX/BRK.B/NVDA 绿、DRAM/TSLA（价格未加载）灰，与账面盈亏列对应。
+
+---
+
+## 历史状态（2026-06-05，第四十七次）✅
 
 ### 持仓明细表新增「成本持仓」列
 
