@@ -1,12 +1,30 @@
 # 投资组合管理系统 — 任务交接文档
 
-**更新日期**：2026-08-14（第五十五次，交易记录新增交易 + 修 CalendarPicker）  
+**更新日期**：2026-08-14（第五十六次，交易记录删除功能）  
 **技术栈**：React 18 + Vite + Tailwind CSS v3 + Recharts + Supabase  
 **运行地址**：http://localhost:5173（本地）/ https://frankchang617.github.io/portfolio-manager/（公网）
 
 ---
 
-## 最新状态（2026-08-14，第五十五次）✅
+## 最新状态（2026-08-14，第五十六次）✅
+
+### 交易记录页新增删除功能
+
+**改动文件**：`src/components/Transactions.jsx`
+
+**需求**：交易记录页支持删除股票交易。
+
+**实现**：
+- 操作列股票交易行新增删除按钮（`Trash2` 图标，红色 hover），与编辑按钮并排
+- `handleDeleteTransaction`：`confirm` 确认（显示股票代码 / 类型 / 日期 / 数量 / 价格）后 dispatch `DELETE_STOCK_TRANSACTION`（reducer 已存在，自动重算持仓 / 均价 / 已实现盈亏）
+- 复用 `allTransactions` 里已补位的 `portfolioId` / `stockId` / `transactionId` 定位字段
+- 期权交易仍显示 `—`（沿用「先只做股票」约定）
+
+**验证**：`npx vite build` 通过（773ms）；浏览器实测：132 行股票交易每行都有编辑 + 删除按钮，点删除触发 confirm 文案正确，取消不删除。未污染真实数据。
+
+---
+
+## 历史状态（2026-08-14，第五十五次）✅
 
 ### 交易记录页新增「新增交易」+ 修复 CalendarPicker 重复 style
 

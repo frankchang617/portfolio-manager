@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { TrendingUp, TrendingDown, Layers, Download, Upload, CalendarDays, X, Pencil, Search, Plus } from 'lucide-react'
+import { TrendingUp, TrendingDown, Layers, Download, Upload, CalendarDays, X, Pencil, Search, Plus, Trash2 } from 'lucide-react'
 import { usePortfolio } from '../contexts/PortfolioContext'
 import { fmt, getPnLClass } from '../utils/formatters'
 import ImportModal from './modals/ImportModal'
@@ -262,6 +262,17 @@ export default function Transactions() {
     setEditTarget(null)
   }
 
+  const handleDeleteTransaction = (t) => {
+    const actionText = t.action === 'buy' ? '买入' : '卖出'
+    if (!confirm(`确定删除 ${t.symbol} 这笔${actionText}交易？\n${t.date} · ${t.quantity} 股 @ $${t.price}`)) return
+    dispatch({
+      type: 'DELETE_STOCK_TRANSACTION',
+      portfolioId: t.portfolioId,
+      stockId: t.stockId,
+      transactionId: t.transactionId,
+    })
+  }
+
   if (!activePortfolio) return null
 
   const ACTION_LABEL = {
@@ -451,10 +462,16 @@ export default function Transactions() {
                       )}
                       <td className="py-3 px-4 text-right">
                         {t.type === 'stock' ? (
-                          <button onClick={() => setEditTarget(t)}
-                            className="p-1.5 rounded-lg text-claude-subtle hover:text-blue-600 hover:bg-blue-50 transition-colors">
-                            <Pencil size={13} />
-                          </button>
+                          <div className="flex items-center justify-end gap-1">
+                            <button onClick={() => setEditTarget(t)}
+                              className="p-1.5 rounded-lg text-claude-subtle hover:text-blue-600 hover:bg-blue-50 transition-colors">
+                              <Pencil size={13} />
+                            </button>
+                            <button onClick={() => handleDeleteTransaction(t)}
+                              className="p-1.5 rounded-lg text-claude-subtle hover:text-loss hover:bg-red-50 transition-colors">
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
                         ) : (
                           <span className="text-claude-subtle text-xs">—</span>
                         )}
