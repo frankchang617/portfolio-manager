@@ -1,12 +1,32 @@
 # 投资组合管理系统 — 任务交接文档
 
-**更新日期**：2026-08-14（第五十一次，修复总资产重复计算卖出期权权利金）  
+**更新日期**：2026-08-14（第五十二次，交易记录新增代码搜索 + 股票交易编辑）  
 **技术栈**：React 18 + Vite + Tailwind CSS v3 + Recharts + Supabase  
 **运行地址**：http://localhost:5173（本地）/ https://frankchang617.github.io/portfolio-manager/（公网）
 
 ---
 
-## 最新状态（2026-08-14，第五十一次）✅
+## 最新状态（2026-08-14，第五十二次）✅
+
+### 交易记录新增「股票代码搜索」+「股票交易编辑」
+
+**改动文件**：`src/components/Transactions.jsx`
+
+**需求**：交易记录页支持按股票代码查询 + 编辑股票交易（先只做股票，期权暂不做）。
+
+**实现**：
+- 新增「股票代码」搜索框（`symbolQuery` state），按 symbol 模糊匹配（大小写不敏感），与类型/日期筛选叠加
+- 新增 `TransactionEditModal` 组件：编辑 交易类型（买/卖）/日期/数量/价格/手续费，带交易总额预览
+- 表格新增「操作」列：股票交易行显示编辑按钮（`Pencil`），期权行显示 `—`
+- `allTransactions` 股票交易补定位字段 `portfolioId`/`stockId`/`transactionId`
+- `handleSaveTransaction`：dispatch `UPDATE_STOCK_TRANSACTION`（reducer 自动用 `calcPosition` 重算持仓/均价/已实现盈亏），复用 StockModal 同款逻辑
+- 引入 `Pencil`/`Search` 图标，`usePortfolio` 解构加 `dispatch`
+
+**验证**：`npx vite build` 通过（726ms）；实测：搜索「TSM」→ 只剩 3 条 TSM；点击编辑按钮 → 弹窗正确预填（TSM 买入 1 股 @ $344.60，2026/03/06）；未污染真实数据。
+
+---
+
+## 历史状态（2026-08-14，第五十一次）✅
 
 ### 修复总资产重复计算卖出期权权利金
 

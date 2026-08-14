@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { TrendingUp, TrendingDown, Layers, Download, Upload, CalendarDays, X } from 'lucide-react'
+import { TrendingUp, TrendingDown, Layers, Download, Upload, CalendarDays, X, Pencil, Search } from 'lucide-react'
 import { usePortfolio } from '../contexts/PortfolioContext'
 import { fmt, getPnLClass } from '../utils/formatters'
 import ImportModal from './modals/ImportModal'
@@ -33,11 +33,115 @@ function exportCSV(rows, filename) {
   URL.revokeObjectURL(url)
 }
 
+// ── Transaction Edit Modal (stock only) ──────────────────────────────────────
+function TransactionEditModal({ transaction, onClose, onSave }) {
+  const [form, setForm] = useState({
+    action: transaction.action,
+    date: transaction.date,
+    shares: String(transaction.quantity),
+    price: String(transaction.price),
+    commission: String(transaction.commission ?? 0),
+  })
+  const [error, setError] = useState('')
+
+  const handleSave = () => {
+    const shares = parseFloat(form.shares)
+    const price = parseFloat(form.price)
+    if (!form.date) return setError('请选择交易日期')
+    if (!shares || shares <= 0) return setError('请输入有效数量')
+    if (!price || price <= 0) return setError('请输入有效价格')
+    onSave({
+      action: form.action,
+      date: form.date,
+      shares,
+      price,
+      commission: parseFloat(form.commission) || 0,
+      total: price * shares,
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay fade-in"
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="rounded-2xl w-full max-w-md shadow-modal border border-claude-border p-6 fade-in"
+        style={{ background: 'var(--claude-card)' }}>
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="text-lg font-bold text-claude-text">编辑股票交易</h3>
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 text-claude-muted hover:text-claude-text transition-colors">
+            <X size={18} />
+          </button>
+        </div>
+        <p className="text-sm text-claude-muted mb-5">
+          <span className="font-bold text-claude-text">{transaction.symbol}</span> · {transaction.name}
+        </p>
+
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-claude-text mb-1.5">交易类型</label>
+              <select className="select" value={form.action}
+                onChange={e => setForm(f => ({ ...f, action: e.target.value }))}>
+                <option value="buy">买入 ↗</option>
+                <option value="sell">卖出 ↘</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-claude-text mb-1.5">交易日期</label>
+              <CalendarPicker value={form.date} onChange={v => setForm(f => ({ ...f, date: v }))} />
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-claude-text mb-1.5">数量（股）</label>
+              <input className="input" type="number" step="1" min="0" value={form.shares}
+                onChange={e => setForm(f => ({ ...f, shares: e.target.value }))} placeholder="0" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-claude-text mb-1.5">价格</label>
+              <input className="input" type="number" step="0.01" min="0" value={form.price}
+                onChange={e => setForm(f => ({ ...f, price: e.target.value }))} placeholder="0.00" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-claude-text mb-1.5">手续费</label>
+              <input className="input" type="number" step="0.01" min="0" value={form.commission}
+                onChange={e => setForm(f => ({ ...f, commission: e.target.value }))} placeholder="0.00" />
+            </div>
+          </div>
+
+          {parseFloat(form.shares) > 0 && parseFloat(form.price) > 0 && (
+            <div className="bg-gray-50 rounded-xl p-4 text-sm flex justify-between">
+              <span className="text-claude-muted">交易总额</span>
+              <span className={`font-semibold ${form.action === 'buy' ? 'text-loss' : 'text-profit'}`}>
+                {form.action === 'buy' ? '-' : '+'}{fmt.currency(parseFloat(form.shares) * parseFloat(form.price))}
+              </span>
+            </div>
+          )}
+
+          {error && <p className="text-sm text-loss bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+
+          <div className="flex gap-3 pt-1">
+            <button onClick={onClose}
+              className="flex-1 px-4 py-2.5 border border-claude-border rounded-xl text-sm font-medium text-claude-muted hover:bg-gray-50 transition-colors">
+              取消
+            </button>
+            <button onClick={handleSave}
+              className="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm transition-colors">
+              保存修改
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function Transactions() {
-  const { activePortfolio, state } = usePortfolio()
+  const { activePortfolio, state, dispatch } = usePortfolio()
   const [filter, setFilter] = useState('all')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [symbolQuery, setSymbolQuery] = useState('')
+  const [editTarget, setEditTarget] = useState(null)
   const [showImport, setShowImport] = useState(false)
 
   const isAggregate = activePortfolio?.isAggregate ?? false
@@ -69,6 +173,9 @@ export default function Transactions() {
             total: t.price * t.shares,
             realizedPnL: t.action === 'sell' && t.realizedPnL != null ? t.realizedPnL : null,
             portfolioName: isAggregate ? p.name : null,
+            portfolioId: p.id,
+            stockId: stock.id,
+            transactionId: t.id,
           })
         }
       }
@@ -117,8 +224,12 @@ export default function Transactions() {
     let list = filter === 'all' ? allTransactions : allTransactions.filter(t => t.type === filter)
     if (dateFrom) list = list.filter(t => t.date >= dateFrom)
     if (dateTo) list = list.filter(t => t.date <= dateTo)
+    if (symbolQuery.trim()) {
+      const q = symbolQuery.trim().toUpperCase()
+      list = list.filter(t => (t.symbol || '').toUpperCase().includes(q))
+    }
     return list
-  }, [allTransactions, filter, dateFrom, dateTo])
+  }, [allTransactions, filter, dateFrom, dateTo, symbolQuery])
 
   const summary = useMemo(() => {
     const totalStockRealizedPnL = subPortfolios
@@ -138,6 +249,17 @@ export default function Transactions() {
     }
   }, [subPortfolios, allTransactions])
 
+  const handleSaveTransaction = (updates) => {
+    dispatch({
+      type: 'UPDATE_STOCK_TRANSACTION',
+      portfolioId: editTarget.portfolioId,
+      stockId: editTarget.stockId,
+      transactionId: editTarget.transactionId,
+      updates,
+    })
+    setEditTarget(null)
+  }
+
   if (!activePortfolio) return null
 
   const ACTION_LABEL = {
@@ -151,6 +273,13 @@ export default function Transactions() {
   return (
     <div className="space-y-5">
       {showImport && <ImportModal onClose={() => setShowImport(false)} />}
+      {editTarget && (
+        <TransactionEditModal
+          transaction={editTarget}
+          onClose={() => setEditTarget(null)}
+          onSave={handleSaveTransaction}
+        />
+      )}
 
       {isAggregate && (
         <div className="flex items-center gap-2.5 bg-blue-50 border border-blue-100 rounded-2xl px-4 py-3">
@@ -223,6 +352,25 @@ export default function Transactions() {
             </button>
           </div>
         </div>
+        {/* Symbol search + Date range */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-1.5 text-sm text-claude-muted">
+            <Search size={13} />
+            <span>股票代码</span>
+          </div>
+          <input
+            className="input w-44"
+            value={symbolQuery}
+            onChange={e => setSymbolQuery(e.target.value)}
+            placeholder="输入代码筛选，如 TSM"
+          />
+          {symbolQuery && (
+            <button onClick={() => setSymbolQuery('')}
+              className="flex items-center gap-1 text-xs text-claude-muted hover:text-claude-text transition-colors">
+              <X size={12} />清除
+            </button>
+          )}
+        </div>
         {/* Date range */}
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-1.5 text-sm text-claude-muted">
@@ -257,7 +405,7 @@ export default function Transactions() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-claude-border bg-gray-50/50">
-                  {['日期', '类型', '标的', '详情', '数量', '成交价', '金额', '手续费', '已实现盈亏', ...(isAggregate ? ['组合'] : [])].map(h => (
+                  {['日期', '类型', '标的', '详情', '数量', '成交价', '金额', '手续费', '已实现盈亏', ...(isAggregate ? ['组合'] : []), '操作'].map(h => (
                     <th key={h} className={`text-xs font-semibold text-claude-subtle uppercase tracking-wide py-3 px-4 whitespace-nowrap ${h === '日期' || h === '类型' || h === '标的' || h === '组合' ? 'text-left' : 'text-right'}`}>
                       {h}
                     </th>
@@ -293,6 +441,16 @@ export default function Transactions() {
                       {isAggregate && (
                         <td className="py-3 px-4 text-left text-xs text-claude-muted whitespace-nowrap">{t.portfolioName}</td>
                       )}
+                      <td className="py-3 px-4 text-right">
+                        {t.type === 'stock' ? (
+                          <button onClick={() => setEditTarget(t)}
+                            className="p-1.5 rounded-lg text-claude-subtle hover:text-blue-600 hover:bg-blue-50 transition-colors">
+                            <Pencil size={13} />
+                          </button>
+                        ) : (
+                          <span className="text-claude-subtle text-xs">—</span>
+                        )}
+                      </td>
                     </tr>
                   )
                 })}
