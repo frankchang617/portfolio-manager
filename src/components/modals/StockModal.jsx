@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, Fragment } from 'react'
-import { X, TrendingUp, TrendingDown, Upload, Trash2, AlertTriangle, ChevronUp, ChevronDown, Download, Pencil, Check } from 'lucide-react'
+import { X, TrendingUp, TrendingDown, Upload, Trash2, AlertTriangle, ChevronUp, ChevronDown, Download, Pencil, Check, Plus } from 'lucide-react'
 import { usePortfolio } from '../../contexts/PortfolioContext'
 import { fmt, getPnLClass } from '../../utils/formatters'
 import { fetchCompanyProfile } from '../../utils/api'
@@ -108,11 +108,22 @@ function parseCSV(text) {
   return { rows, rowErrors, fatalError: null }
 }
 
+// ── Row factory (multi-row batch entry) ────────────────────────────────────
+const genRowId = () => `row_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+const createRow = () => ({
+  id: genRowId(),
+  action: 'buy',
+  date: new Date().toISOString().split('T')[0],
+  shares: '',
+  price: '',
+  commission: '',
+})
+
 // ── Main Modal ───────────────────────────────────────────────────────────────
 export default function StockModal({ isOpen, onClose, editStock = null }) {
   const { dispatch, activePortfolio, state } = usePortfolio()
   const [tab, setTab] = useState('transactions')   // 'transactions' | 'new' | 'csv'
-  const [form, setForm] = useState({ action: 'buy', date: new Date().toISOString().split('T')[0], shares: '', price: '', commission: '' })
+  const [rows, setRows] = useState(() => [createRow()])
   const [csvError, setCsvError] = useState('')
   const [csvPreview, setCsvPreview] = useState([])
   const [csvRowErrors, setCsvRowErrors] = useState([])
@@ -140,7 +151,7 @@ export default function StockModal({ isOpen, onClose, editStock = null }) {
   useEffect(() => {
     if (isOpen) {
       setTab(editStock ? 'transactions' : 'new')
-      setForm({ action: 'buy', date: new Date().toISOString().split('T')[0], shares: '', price: '', commission: '' })
+      setRows([createRow()])
       setCsvError(''); setCsvPreview([]); setCsvRowErrors([]); setAddError('')
       setNewSymbol(''); setNewName(''); setNewNote(''); setNameLookupState('idle')
       // Reset uncontrolled symbol input DOM value
@@ -176,49 +187,96 @@ export default function StockModal({ isOpen, onClose, editStock = null }) {
   const buyTotal = transactions.filter(t => t.action === 'buy').reduce((s, t) => s + t.price * t.shares, 0)
   const sellTotal = transactions.filter(t => t.action === 'sell').reduce((s, t) => s + t.price * t.shares, 0)
 
-  // ── Add transaction ──────────────────────────────────────────────────────
-  const handleAddTransaction = () => {
-    setAddError('')
-    const shares = parseFloat(form.shares)
-    const price = parseFloat(form.price)
-    if (!form.date) return setAddError('请选择交易日期')
-    if (!shares || shares <= 0) return setAddError('请输入有效数量')
-    if (!price || price <= 0) return setAddError('请输入有效价格')
+  // Batch entry summary (for 'new' tab)
+  const validRows = rows.filter(r => {
+    const shares = parseFloat(r.shares)
+    const price = parseFloat(r.price)
+    return shares > 0 && price > 0
+  })
+  const validCount = validRows.length
+  const totalBuy = validRows.filter(r => r.action === 'buy').reduce((s, r) => s + parseFloat(r.shares) * parseFloat(r.price), 0)
+  const totalSell = validRows.filter(r => r.action === 'sell').reduce((s, r) => s + parseFloat(r.shares) * parseFloat(r.price), 0)
 
-    dispatch({
-      type: 'ADD_STOCK_TRANSACTION',
-      portfolioId: activePortfolio.id,
-      stockId: editStock.id,
-      transaction: { action: form.action, date: form.date, shares, price, commission: parseFloat(form.commission) || 0, total: price * shares },
+  // ── Row helpers ─────────────────────────────────────────────────────────
+  const updateRow = (id, patch) => setRows(rs => rs.map(r => r.id === id ? { ...r, ...patch } : r))
+  const addRow = () => setRows(rs => [...rs, createRow()])
+  const removeRow = (id) => setRows(rs => rs.length > 1 ? rs.filter(r => r.id !== id) : rs)
+
+  const rowError = (r) => {
+    const shares = parseFloat(r.shares)
+    const price = parseFloat(r.price)
+    if (!r.date) return '请选择交易日期'
+    if (!shares || shares <= 0) return '请输入有效数量'
+    if (!price || price <= 0) return '请输入有效价格'
+    return null
+  }
+
+  // Validate all rows; return the first error string or null
+  const validateRows = () => {
+    for (let i = 0; i < rows.length; i++) {
+      const err = rowError(rows[i])
+      if (err) return rows.length > 1 ? `第 ${i + 1} 笔：${err}` : err
+    }
+    return null
+  }
+
+  const toTransaction = (r) => {
+    const shares = parseFloat(r.shares)
+    const price = parseFloat(r.price)
+    return {
+      action: r.action,
+      date: r.date,
+      shares,
+      price,
+      commission: parseFloat(r.commission) || 0,
+      total: price * shares,
+    }
+  }
+
+  // ── Add transactions (batch) ────────────────────────────────────────────
+  const handleAddTransactions = () => {
+    setAddError('')
+    const err = validateRows()
+    if (err) return setAddError(err)
+    rows.forEach(r => {
+      dispatch({
+        type: 'ADD_STOCK_TRANSACTION',
+        portfolioId: activePortfolio.id,
+        stockId: editStock.id,
+        transaction: toTransaction(r),
+      })
     })
-    setForm(f => ({ ...f, shares: '', price: '', commission: '' }))
+    setRows([createRow()])
     setTab('transactions')
   }
 
-  // ── Add new stock (with first transaction) ───────────────────────────────
+  // ── Add new stock (with batch transactions) ─────────────────────────────
   const handleAddStock = () => {
     setAddError('')
     const sym = newSymbol.trim().toUpperCase()
     if (!sym) return setAddError('请输入股票代码')
-    const shares = parseFloat(form.shares)
-    const price = parseFloat(form.price)
-    if (!form.date) return setAddError('请选择交易日期')
-    if (!shares || shares <= 0) return setAddError('请输入有效数量')
-    if (!price || price <= 0) return setAddError('请输入有效价格')
+    const err = validateRows()
+    if (err) return setAddError(err)
 
-    // Create stock then add first transaction
+    // Create empty stock, then add each transaction via reducer (auto-recalc)
     const stockId = `${Date.now()}_${Math.random().toString(36).slice(2,9)}`
     dispatch({
       type: 'ADD_STOCK',
       portfolioId: activePortfolio.id,
       stock: {
         id: stockId, symbol: sym, name: newName.trim() || sym,
-        shares: form.action === 'buy' ? shares : 0,
-        avgCost: form.action === 'buy' ? price : 0,
-        note: newNote.trim(),
+        shares: 0, avgCost: 0, note: newNote.trim(),
         initialShares: 0, initialAvgCost: 0, stockRealizedPnL: 0,
-        transactions: [{ id: `${Date.now()}_init`, action: form.action, date: form.date, shares, price, commission: parseFloat(form.commission) || 0, total: price * shares }],
+        transactions: [],
       },
+    })
+    rows.forEach(r => {
+      dispatch({
+        type: 'ADD_STOCK_TRANSACTION',
+        portfolioId: activePortfolio.id,
+        stockId,
+        transaction: toTransaction(r),
+      })
     })
     onClose()
   }
@@ -742,73 +800,76 @@ export default function StockModal({ isOpen, onClose, editStock = null }) {
 
           {/* ── 新增交易 / 添加股票 tab ── */}
           {tab === 'new' && (
-            <div className="space-y-5">
-              {/* Type + Date row */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="label">交易类型</label>
-                  <select className="select" value={form.action} onChange={e => setForm(f => ({ ...f, action: e.target.value }))}>
-                    <option value="buy">买入 ↗</option>
-                    <option value="sell">卖出 ↘</option>
-                  </select>
+            <div className="space-y-4">
+              {/* 交易行列表 */}
+              {rows.map((r, i) => (
+                <div key={r.id} className="border border-claude-border rounded-2xl p-4 bg-gray-50/40 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-claude-muted">第 {i + 1} 笔</span>
+                    {rows.length > 1 && (
+                      <button onClick={() => removeRow(r.id)}
+                        className="p-1 rounded-lg text-claude-subtle hover:text-loss hover:bg-red-50 transition-colors">
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
+                  {/* Type + Date row */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="label">交易类型</label>
+                      <select className="select" value={r.action} onChange={e => updateRow(r.id, { action: e.target.value })}>
+                        <option value="buy">买入 ↗</option>
+                        <option value="sell">卖出 ↘</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="label">交易日期</label>
+                      <CalendarPicker value={r.date} onChange={v => updateRow(r.id, { date: v })} />
+                    </div>
+                  </div>
+                  {/* Shares + Price + Commission row */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="label">数量</label>
+                      <SpinnerInput value={r.shares} onChange={v => updateRow(r.id, { shares: v })}
+                        step={1} placeholder="0.00" />
+                    </div>
+                    <div>
+                      <label className="label">价格</label>
+                      <SpinnerInput value={r.price} onChange={v => updateRow(r.id, { price: v })}
+                        prefix="$" step={0.01} placeholder="0.00" />
+                    </div>
+                    <div>
+                      <label className="label">手续费（可选）</label>
+                      <SpinnerInput value={r.commission} onChange={v => updateRow(r.id, { commission: v })}
+                        prefix="$" step={0.01} placeholder="0.00" />
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className="label">交易日期</label>
-                  <CalendarPicker value={form.date} onChange={v => setForm(f => ({ ...f, date: v }))} />
-                </div>
-              </div>
+              ))}
 
-              {/* Shares + Price + Commission row */}
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className="label">交易数量</label>
-                  <SpinnerInput value={form.shares} onChange={v => setForm(f => ({ ...f, shares: v }))}
-                    step={1} placeholder="0.00" />
-                </div>
-                <div>
-                  <label className="label">交易价格</label>
-                  <SpinnerInput value={form.price} onChange={v => setForm(f => ({ ...f, price: v }))}
-                    prefix="$" step={0.01} placeholder="0.00" />
-                </div>
-                <div>
-                  <label className="label">手续费（可选）</label>
-                  <SpinnerInput value={form.commission} onChange={v => setForm(f => ({ ...f, commission: v }))}
-                    prefix="$" step={0.01} placeholder="0.00" />
-                </div>
-              </div>
+              {/* 添加一行 */}
+              <button onClick={addRow}
+                className="w-full flex items-center justify-center gap-2 py-2.5 border-2 border-dashed border-claude-border rounded-2xl text-sm text-claude-muted hover:text-claude-text hover:border-gray-400 hover:bg-gray-50 transition-colors">
+                <Plus size={14} />添加一行
+              </button>
 
-              {/* Preview */}
-              {form.shares && form.price && parseFloat(form.shares) > 0 && parseFloat(form.price) > 0 && (
+              {/* 汇总预览 */}
+              {validCount > 0 && (
                 <div className="bg-gray-50 rounded-xl p-4 text-sm space-y-2">
                   <div className="flex justify-between">
-                    <span className="text-claude-muted">交易总额</span>
-                    <span className={`font-semibold ${form.action === 'buy' ? 'text-profit' : 'text-loss'}`}>
-                      {form.action === 'buy' ? '+' : '-'}{fmt.currency(parseFloat(form.shares) * parseFloat(form.price))}
-                    </span>
+                    <span className="text-claude-muted">共 {validCount} 笔</span>
                   </div>
-                  {parseFloat(form.commission) > 0 && (
+                  {totalBuy > 0 && (
                     <div className="flex justify-between">
-                      <span className="text-claude-muted">手续费</span>
-                      <span className="font-medium text-loss">-{fmt.currency(parseFloat(form.commission))}</span>
+                      <span className="text-claude-muted">买入总额</span>
+                      <span className="font-semibold text-profit">+{fmt.currency(totalBuy)}</span>
                     </div>
                   )}
-                  {editStock && form.action === 'buy' && (
+                  {totalSell > 0 && (
                     <div className="flex justify-between">
-                      <span className="text-claude-muted">新均价（含手续费）</span>
-                      <span className="font-medium text-claude-text">
-                        {fmt.currency(
-                          (editStock.shares * editStock.avgCost + parseFloat(form.shares) * parseFloat(form.price) + (parseFloat(form.commission) || 0))
-                          / (editStock.shares + parseFloat(form.shares))
-                        )}
-                      </span>
-                    </div>
-                  )}
-                  {editStock && form.action === 'sell' && (
-                    <div className="flex justify-between">
-                      <span className="text-claude-muted">预计已实现盈亏</span>
-                      <span className={`font-medium ${((parseFloat(form.price) - editStock.avgCost) * parseFloat(form.shares) - (parseFloat(form.commission) || 0)) >= 0 ? 'text-profit' : 'text-loss'}`}>
-                        {fmt.pnl((parseFloat(form.price) - editStock.avgCost) * parseFloat(form.shares) - (parseFloat(form.commission) || 0))}
-                      </span>
+                      <span className="text-claude-muted">卖出总额</span>
+                      <span className="font-semibold text-loss">-{fmt.currency(totalSell)}</span>
                     </div>
                   )}
                 </div>
@@ -835,10 +896,10 @@ export default function StockModal({ isOpen, onClose, editStock = null }) {
               {/* Buttons */}
               <div className="flex gap-3 pt-1">
                 <button
-                  onClick={editStock ? handleAddTransaction : handleAddStock}
+                  onClick={editStock ? handleAddTransactions : handleAddStock}
                   className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-2xl transition-colors text-sm"
                 >
-                  确认添加
+                  确认添加{validCount > 0 ? `（${validCount} 笔）` : ''}
                 </button>
                 <button onClick={() => editStock ? setTab('transactions') : onClose()}
                   className="px-6 py-3 border border-claude-border rounded-2xl text-sm font-medium text-claude-muted hover:text-claude-text hover:bg-claude-bg transition-colors">

@@ -1,12 +1,34 @@
 # 投资组合管理系统 — 任务交接文档
 
-**更新日期**：2026-06-05（第四十八次，持仓价值列按盈亏着色）  
+**更新日期**：2026-08-14（第四十九次，新增交易支持多行批量录入）  
 **技术栈**：React 18 + Vite + Tailwind CSS v3 + Recharts + Supabase  
 **运行地址**：http://localhost:5173（本地）/ https://frankchang617.github.io/portfolio-manager/（公网）
 
 ---
 
-## 最新状态（2026-06-05，第四十八次）✅
+## 最新状态（2026-08-14，第四十九次）✅
+
+### 持仓管理「新增交易」支持多行批量录入
+
+**改动文件**：`src/components/modals/StockModal.jsx`
+
+**需求**：点操作 → 新增交易时，可一次性增加多条交易，无需逐条录入。
+
+**实现**：
+- 单条表单 `form` state 改为 `rows` 数组，模块级 `createRow()` 工厂生成行（每行 `{ id, action, date, shares, price, commission }`）
+- 「新增交易」tab 改为多行卡片列表，每行含类型/日期/数量/价格/手续费 + 删除按钮（`rows.length > 1` 时显示）
+- 底部「+ 添加一行」按钮动态加行；`removeRow` 保证至少保留 1 行
+- 汇总预览：`validRows`/`validCount`/`totalBuy`/`totalSell`，显示「共 N 笔 + 买入/卖出总额」
+- `handleAddTransaction` → `handleAddTransactions`（批量）：`validateRows()` 逐行校验（日期/数量/价格，错误提示带「第 N 笔」前缀），`rows.forEach` 逐条 dispatch `ADD_STOCK_TRANSACTION`（reducer 的 `calcPosition` 自动重算持仓/均价/已实现盈亏，与 CSV 导入同款模式）
+- `handleAddStock`（新股票模式）改为：`ADD_STOCK` 建空股票 → 逐条 `ADD_STOCK_TRANSACTION`，同样支持多行
+- 确认按钮文案动态显示「确认添加（N 笔）」
+- 导入 `Plus` 图标
+
+**验证**：`npx vite build` 通过（814ms）；Playwright 实测：添加第 2 笔、汇总「共 2 笔 / 买入 $230.00」（10×15+5×16 计算正确）、确认按钮「确认添加（2 笔）」、新股票模式 symbol 校验「请输入股票代码」均正常，未污染真实数据。
+
+---
+
+## 历史状态（2026-06-05，第四十八次）✅
 
 ### 持仓明细表「持仓价值」列按盈亏着色
 
