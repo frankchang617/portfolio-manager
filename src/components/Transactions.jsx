@@ -87,7 +87,7 @@ function TransactionEditModal({ transaction, onClose, onSave }) {
             </div>
             <div>
               <label className="block text-sm font-medium text-claude-text mb-1.5">交易日期</label>
-              <CalendarPicker value={form.date} onChange={v => setForm(f => ({ ...f, date: v }))} />
+              <CalendarPicker value={form.date} onChange={v => setForm(f => ({ ...f, date: v }))} warnFuture />
             </div>
           </div>
           <div className="grid grid-cols-3 gap-4">

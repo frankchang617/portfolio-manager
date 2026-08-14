@@ -77,3 +77,11 @@ export function getPnLSign(val) {
   if (val > 0) return '+'
   return ''
 }
+
+export function isFutureDate(dateStr) {
+  if (!dateStr) return false
+  const d = new Date(dateStr + 'T00:00:00')
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return d.getTime() > today.getTime()
+}

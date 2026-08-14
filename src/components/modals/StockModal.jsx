@@ -705,7 +705,7 @@ export default function StockModal({ isOpen, onClose, editStock = null }) {
                                     </div>
                                     <div>
                                       <label className="label">交易日期</label>
-                                      <CalendarPicker value={editForm.date} onChange={v => setEditForm(f => ({ ...f, date: v }))} />
+                                      <CalendarPicker value={editForm.date} onChange={v => setEditForm(f => ({ ...f, date: v }))} warnFuture />
                                     </div>
                                     <div>
                                       <label className="label">数量（股）</label>
@@ -824,7 +824,7 @@ export default function StockModal({ isOpen, onClose, editStock = null }) {
                     </div>
                     <div>
                       <label className="label">交易日期</label>
-                      <CalendarPicker value={r.date} onChange={v => updateRow(r.id, { date: v })} />
+                      <CalendarPicker value={r.date} onChange={v => updateRow(r.id, { date: v })} warnFuture />
                     </div>
                   </div>
                   {/* Shares + Price + Commission row */}

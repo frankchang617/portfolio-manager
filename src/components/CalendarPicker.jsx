@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
+import { isFutureDate } from '../utils/formatters'
 
 const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
 const MONTHS_LONG  = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
-export default function CalendarPicker({ value, onChange, placeholder = '选择日期', minDate }) {
+export default function CalendarPicker({ value, onChange, placeholder = '选择日期', minDate, warnFuture }) {
   const [open, setOpen] = useState(false)
   const [pickerMode, setPickerMode] = useState('day')   // 'day' | 'month' | 'year'
   const [inputValue, setInputValue] = useState(value ? value.replace(/-/g, '/') : '')
@@ -13,6 +14,7 @@ export default function CalendarPicker({ value, onChange, placeholder = '选择�
   const inputRef = useRef(null)
 
   const parsed = value ? new Date(value + 'T00:00:00') : null
+  const isFuture = warnFuture && value ? isFutureDate(value) : false
   const [viewYear, setViewYear] = useState(parsed?.getFullYear() ?? new Date().getFullYear())
   const [viewMonth, setViewMonth] = useState(parsed?.getMonth() ?? new Date().getMonth())
 
@@ -226,6 +228,11 @@ export default function CalendarPicker({ value, onChange, placeholder = '选择�
           )}
 
         </div>
+      )}
+      {isFuture && (
+        <p className="mt-1.5 flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
+          <span>⚠</span> 该日期在未来，请确认是否正确
+        </p>
       )}
     </div>
   )

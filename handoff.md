@@ -1,12 +1,32 @@
 # 投资组合管理系统 — 任务交接文档
 
-**更新日期**：2026-08-14（第五十三次，持仓管理隐藏已清仓开关）  
+**更新日期**：2026-08-14（第五十四次，交易日期未来提醒）  
 **技术栈**：React 18 + Vite + Tailwind CSS v3 + Recharts + Supabase  
 **运行地址**：http://localhost:5173（本地）/ https://frankchang617.github.io/portfolio-manager/（公网）
 
 ---
 
-## 最新状态（2026-08-14，第五十三次）✅
+## 最新状态（2026-08-14，第五十四次）✅
+
+### 交易日期新增「未来日期」提醒
+
+**改动文件**：`src/utils/formatters.js`、`src/components/CalendarPicker.jsx`、`src/components/Transactions.jsx`、`src/components/modals/StockModal.jsx`
+
+**需求**：新增/编辑股票交易时，日期填成未来日期显示黄色提醒（不阻止保存）。
+
+**背景**：复星证券 AMZN 因买入日期误填成未来（2026-10），导致按日期重放交易后持仓未归零。加防呆提醒避免再次踩坑。
+
+**实现**：
+- `formatters.js` 新增 `isFutureDate(dateStr)`：交易日期 > 今天（本地 0 点）即视为未来
+- `CalendarPicker` 新增可选 `warnFuture` prop（默认关闭）：为 true 且 value 是未来时，输入框下方显示「⚠ 该日期在未来，请确认是否正确」（amber 色，深色模式 amber-400）
+- 三处股票交易日期传 `warnFuture`：StockModal 新增交易多行、StockModal 交易记录编辑单条、Transactions 编辑弹窗
+- 期权到期日等场景不传 `warnFuture`，未来日期是正常的，不受影响
+
+**验证**：`npx vite build` 通过（717ms）；浏览器实测：日期改成 2026-12-31 → 警告显示，改回 2026-08-14（今天）→ 警告消失。未污染真实数据。
+
+---
+
+## 历史状态（2026-08-14，第五十三次）✅
 
 ### 持仓管理新增「隐藏已清仓股票」开关
 
