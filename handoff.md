@@ -1,12 +1,32 @@
 # 投资组合管理系统 — 任务交接文档
 
-**更新日期**：2026-08-14（第五十二次，交易记录新增代码搜索 + 股票交易编辑）  
+**更新日期**：2026-08-14（第五十三次，持仓管理隐藏已清仓开关）  
 **技术栈**：React 18 + Vite + Tailwind CSS v3 + Recharts + Supabase  
 **运行地址**：http://localhost:5173（本地）/ https://frankchang617.github.io/portfolio-manager/（公网）
 
 ---
 
-## 最新状态（2026-08-14，第五十二次）✅
+## 最新状态（2026-08-14，第五十三次）✅
+
+### 持仓管理新增「隐藏已清仓股票」开关
+
+**改动文件**：`src/components/StockPositions.jsx`
+
+**需求**：持仓管理表格里已清仓股票（`shares === 0`）默认不再显示，可一键切换显示/隐藏。
+
+**实现**：
+- 新增 `hideCleared` state，初值读 `localStorage.getItem('portfolio_manager_hide_cleared') !== 'false'`（默认隐藏，并记住用户选择）
+- 新增 `toggleHideCleared`：切换状态并写回 localStorage
+- 表格卡片头部（排序方式行右侧）新增「显示/隐藏已清仓」开关按钮（`Eye`/`EyeOff` 图标），带已清仓数量「显示已清仓 (N)」，无已清仓时禁用
+- `sorted` useMemo：`hideCleared` 为 true 时只返回未清仓（`active`），false 时恢复原行为（未清仓排序 + 已清仓追加末尾）；新增 `clearedCount`
+- 空状态增强：隐藏且存在已清仓时，提示「N 只已清仓股票已隐藏，点『显示已清仓』查看」
+- 聚合视图（总投资组合）同样生效（开关不区分 isAggregate）
+
+**验证**：`npx vite build` 通过（674ms）；浏览器实测：默认隐藏（15 只已清仓不显示，按钮「显示已清仓 (15)」）→ 点击后 47 行含 15 只已清仓（按钮「隐藏已清仓」）→ 再点切回 32 行隐藏，localStorage 值正确切换。未污染真实数据。
+
+---
+
+## 历史状态（2026-08-14，第五十二次）✅
 
 ### 交易记录新增「股票代码搜索」+「股票交易编辑」
 

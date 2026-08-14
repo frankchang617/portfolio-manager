@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { TrendingUp, TrendingDown, Pencil, Plus, Layers } from 'lucide-react'
+import { TrendingUp, TrendingDown, Pencil, Plus, Layers, Eye, EyeOff } from 'lucide-react'
 import { usePortfolio } from '../contexts/PortfolioContext'
 import { fmt, getPnLClass } from '../utils/formatters'
 import StockModal from './modals/StockModal'
@@ -74,6 +74,9 @@ export default function StockPositions() {
   const [modal, setModal] = useState({ open: false, edit: null })
   const [sortBy, setSortBy] = useState(null)
   const [sortDir, setSortDir] = useState('desc')
+  const [hideCleared, setHideCleared] = useState(
+    () => localStorage.getItem('portfolio_manager_hide_cleared') !== 'false'
+  )
 
   const prices = state.prices
   const r = state.settings?.riskFreeRate ?? 0.05
@@ -87,6 +90,14 @@ export default function StockPositions() {
       setSortBy(field)
       setSortDir('desc')
     }
+  }
+
+  const toggleHideCleared = () => {
+    setHideCleared(v => {
+      const next = !v
+      localStorage.setItem('portfolio_manager_hide_cleared', String(next))
+      return next
+    })
   }
 
   // Source stocks: merged from all sub-portfolios if aggregate, else from active portfolio
@@ -179,6 +190,8 @@ export default function StockPositions() {
     })
   }, [sourceStocks, prices])
 
+  const clearedCount = rows.filter(r => r.isCleared).length
+
   const sorted = useMemo(() => {
     const active = rows.filter(r => !r.isCleared)
     const cleared = rows.filter(r => r.isCleared)
@@ -188,8 +201,8 @@ export default function StockPositions() {
           return sortDir === 'desc' ? bv - av : av - bv
         })
       : active
-    return [...sortedActive, ...cleared]
-  }, [rows, sortBy, sortDir])
+    return hideCleared ? sortedActive : [...sortedActive, ...cleared]
+  }, [rows, sortBy, sortDir, hideCleared])
 
   const metrics = useMemo(() => {
     const active = rows.filter(r => !r.isCleared)
@@ -351,18 +364,37 @@ export default function StockPositions() {
                 </button>
               )}
             </div>
-            {!isAggregate && (
-              <button className="btn-primary flex-shrink-0" onClick={() => setModal({ open: true, edit: null })}>
-                <Plus size={14} />添加股票
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={toggleHideCleared}
+                disabled={clearedCount === 0}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all border flex items-center gap-1.5 bg-white border-claude-border ${
+                  clearedCount === 0
+                    ? 'text-claude-subtle opacity-50 cursor-not-allowed'
+                    : 'text-claude-muted hover:text-claude-text'
+                }`}
+              >
+                {hideCleared ? <Eye size={14} /> : <EyeOff size={14} />}
+                {hideCleared ? `显示已清仓${clearedCount > 0 ? ` (${clearedCount})` : ''}` : '隐藏已清仓'}
               </button>
-            )}
+              {!isAggregate && (
+                <button className="btn-primary" onClick={() => setModal({ open: true, edit: null })}>
+                  <Plus size={14} />添加股票
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
         {/* Table */}
         {sorted.length === 0 ? (
           <div className="text-center py-16 text-claude-muted">
-            {isAggregate ? (
+            {hideCleared && clearedCount > 0 ? (
+              <>
+                <p className="text-base font-medium mb-2">当前无持仓</p>
+                <p className="text-sm">{clearedCount} 只已清仓股票已隐藏，点「显示已清仓」查看</p>
+              </>
+            ) : isAggregate ? (
               <>
                 <p className="text-base font-medium mb-2">暂无汇总持仓</p>
                 <p className="text-sm">请先在子组合中添加股票</p>
