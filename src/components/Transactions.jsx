@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react'
-import { TrendingUp, TrendingDown, Layers, Download, Upload, CalendarDays, X, Pencil, Search } from 'lucide-react'
+import { TrendingUp, TrendingDown, Layers, Download, Upload, CalendarDays, X, Pencil, Search, Plus } from 'lucide-react'
 import { usePortfolio } from '../contexts/PortfolioContext'
 import { fmt, getPnLClass } from '../utils/formatters'
 import ImportModal from './modals/ImportModal'
+import AddTransactionModal from './modals/AddTransactionModal'
 import CalendarPicker from './CalendarPicker'
 
 function exportCSV(rows, filename) {
@@ -143,6 +144,7 @@ export default function Transactions() {
   const [symbolQuery, setSymbolQuery] = useState('')
   const [editTarget, setEditTarget] = useState(null)
   const [showImport, setShowImport] = useState(false)
+  const [showAdd, setShowAdd] = useState(false)
 
   const isAggregate = activePortfolio?.isAggregate ?? false
 
@@ -273,6 +275,7 @@ export default function Transactions() {
   return (
     <div className="space-y-5">
       {showImport && <ImportModal onClose={() => setShowImport(false)} />}
+      {showAdd && <AddTransactionModal onClose={() => setShowAdd(false)} />}
       {editTarget && (
         <TransactionEditModal
           transaction={editTarget}
@@ -340,6 +343,11 @@ export default function Transactions() {
           ))}
           <div className="ml-auto flex items-center gap-2">
             <span className="text-xs text-claude-muted">显示 {filtered.length} 条</span>
+            <button
+              onClick={() => setShowAdd(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors">
+              <Plus size={13} />新增交易
+            </button>
             <button
               onClick={() => setShowImport(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 border border-claude-border rounded-lg text-sm text-claude-text hover:bg-gray-50 transition-colors">

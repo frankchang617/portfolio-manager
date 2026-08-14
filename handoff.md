@@ -1,12 +1,35 @@
 # 投资组合管理系统 — 任务交接文档
 
-**更新日期**：2026-08-14（第五十四次，交易日期未来提醒）  
+**更新日期**：2026-08-14（第五十五次，交易记录新增交易 + 修 CalendarPicker）  
 **技术栈**：React 18 + Vite + Tailwind CSS v3 + Recharts + Supabase  
 **运行地址**：http://localhost:5173（本地）/ https://frankchang617.github.io/portfolio-manager/（公网）
 
 ---
 
-## 最新状态（2026-08-14，第五十四次）✅
+## 最新状态（2026-08-14，第五十五次）✅
+
+### 交易记录页新增「新增交易」+ 修复 CalendarPicker 重复 style
+
+**改动文件**：`src/components/modals/AddTransactionModal.jsx`（新建）、`src/components/Transactions.jsx`、`src/components/CalendarPicker.jsx`
+
+**需求**：交易记录页加「新增交易」入口（多笔，也可单笔）；顺带修复 CalendarPicker 日历弹层重复 style 属性。
+
+**实现（新增交易）**：
+- 筛选栏「导入 CSV」旁新增蓝色「+ 新增交易」按钮
+- 新增 `AddTransactionModal` 组件，复用 StockModal 的多行录入模式（SpinnerInput / createRow / validateRows / 汇总预览）
+  - 组合选择：聚合视图（总投资组合）下拉选子组合；非聚合视图固定当前组合
+  - 股票代码输入框自动匹配：已有持仓 → 绿色提示「已有持仓：XXX（当前 N 股）」；新代码 → 灰提示「将新建股票 XXX」
+  - 多行交易（类型 / 日期 / 数量 / 价格 / 手续费），日期带未来日期提醒（`warnFuture`）
+  - 提交：已有股票 → 逐笔 `ADD_STOCK_TRANSACTION`；新股票 → 先 `ADD_STOCK` 建空股票再逐笔 `ADD_STOCK_TRANSACTION`（reducer 自动重算持仓 / 均价 / 已实现盈亏）
+- 只做股票买卖，期权暂不做（沿用约定）
+
+**修复（CalendarPicker）**：日历弹层两个重复 `style` 属性合并为一个，修复 `background: var(--claude-card)` 因被 `boxShadow` 覆盖而未生效的问题
+
+**验证**：`npx vite build` 通过（745ms）；浏览器实测：按钮 / 弹窗打开，输入 NVDA →「已有持仓：NVDA（当前 2 股）」，输入 TESTXYZ →「将新建股票 TESTXYZ」，「添加一行」→ 出现第 1/2 笔。未提交污染真实数据。
+
+---
+
+## 历史状态（2026-08-14，第五十四次）✅
 
 ### 交易日期新增「未来日期」提醒
 
