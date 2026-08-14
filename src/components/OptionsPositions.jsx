@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Plus, AlertTriangle, Search, ChevronDown, ChevronRight, Trash2, TrendingUp, TrendingDown, Edit2, Layers, FlaskConical, GitBranch, Info } from 'lucide-react'
+import { Plus, AlertTriangle, Search, ChevronDown, ChevronRight, Trash2, TrendingUp, TrendingDown, Edit2, Layers, FlaskConical, GitBranch, Info, X } from 'lucide-react'
 import { usePortfolio } from '../contexts/PortfolioContext'
 import { calculateOptionMetrics, daysToExpiry } from '../utils/blackScholes'
 import { fmt, getPnLClass } from '../utils/formatters'
@@ -153,6 +153,203 @@ function ExerciseModal({ option, onClose, onConfirm }) {
   )
 }
 
+// ── Roll Modal ────────────────────────────────────────────────────────────────
+function RollModal({ option, onClose, onConfirm }) {
+  const contracts = Math.abs(option.contracts ?? 1)
+  const direction = option.direction || (option.contracts > 0 ? 'buy' : 'sell')
+  const premium = option.avgPremium ?? option.premium ?? 0
+
+  // 平旧合约
+  const [closePrice, setClosePrice] = useState('')
+  const [closeDate, setCloseDate] = useState(new Date().toISOString().split('T')[0])
+  const [closeCommission, setCloseCommission] = useState('')
+
+  // 开新合约
+  const [newType, setNewType] = useState(option.optionType)
+  const [newDirection, setNewDirection] = useState(direction)
+  const [newStrike, setNewStrike] = useState('')
+  const [newExpiration, setNewExpiration] = useState('')
+  const [newContracts, setNewContracts] = useState(String(contracts))
+  const [newPremium, setNewPremium] = useState('')
+  const [newCommission, setNewCommission] = useState('')
+
+  const closeComm = closeCommission && !isNaN(+closeCommission) ? +closeCommission : 0
+  const gross = closePrice && !isNaN(+closePrice)
+    ? direction === 'buy'
+      ? (+closePrice - premium) * contracts * 100
+      : (premium - +closePrice) * contracts * 100
+    : null
+  const oldPnL = gross != null ? gross - (option.commission ?? 0) - closeComm : null
+
+  const newPrem = newPremium && !isNaN(+newPremium) ? +newPremium : null
+  const newCredit = newDirection === 'sell' && newPrem != null && !isNaN(+newContracts)
+    ? newPrem * +newContracts * 100
+    : null
+
+  const canSubmit = closePrice && !isNaN(+closePrice) && +closePrice >= 0
+    && newStrike && !isNaN(+newStrike) && +newStrike > 0
+    && newExpiration
+    && newPremium && !isNaN(+newPremium) && +newPremium >= 0
+    && newContracts && !isNaN(+newContracts) && +newContracts > 0
+
+  const handleSubmit = () => {
+    if (!canSubmit) return
+    const rolledFrom = `${option.symbol} ${option.optionType === 'call' ? 'Call' : 'Put'} $${option.strike} ${option.expiration}`
+    onConfirm({
+      closePrice: +closePrice,
+      closeDate,
+      closeCommission: closeComm,
+      newOption: {
+        symbol: option.symbol,
+        tradeDate: closeDate,
+        optionType: newType,
+        direction: newDirection,
+        strike: +newStrike,
+        expiration: newExpiration,
+        contracts: +newContracts,
+        avgPremium: +newPremium,
+        commission: newCommission && !isNaN(+newCommission) ? +newCommission : 0,
+        impliedVolatility: option.impliedVolatility ?? 0.3,
+        note: `Rolled from ${rolledFrom}`,
+        status: 'open',
+        realizedPnL: null,
+        rolledFrom,
+      },
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay fade-in"
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="rounded-2xl w-full max-w-lg shadow-modal border border-claude-border fade-in flex flex-col"
+        style={{ maxHeight: '92vh', background: 'var(--claude-card)' }}>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-claude-border flex-shrink-0">
+          <h3 className="text-lg font-bold text-claude-text">滚动（Roll）</h3>
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 text-claude-muted hover:text-claude-text transition-colors">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
+          {/* 旧合约信息 */}
+          <div className="bg-gray-50 rounded-2xl p-4 border border-claude-border">
+            <p className="text-xs font-semibold text-claude-muted uppercase tracking-wide mb-2">旧合约（将被平仓）</p>
+            <p className="text-sm font-medium text-claude-text">
+              {option.symbol} {option.optionType === 'call' ? 'Call' : 'Put'} ${option.strike} · {option.expiration}
+            </p>
+            <p className="text-xs text-claude-muted mt-1">
+              {direction === 'sell' ? '卖出' : '买入'} {contracts} 张 · 权利金 {fmt.currency(premium)}/股
+            </p>
+          </div>
+
+          {/* 平掉旧合约 */}
+          <div>
+            <p className="text-xs font-semibold text-claude-muted uppercase tracking-wide mb-3">平掉旧合约</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-claude-text mb-1.5">买回价格（每股）*</label>
+                <input className="input" type="number" step="0.01" min="0" value={closePrice}
+                  onChange={e => setClosePrice(e.target.value)} placeholder="0.00" autoFocus />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-claude-text mb-1.5">平仓日期</label>
+                <CalendarPicker value={closeDate} onChange={setCloseDate} />
+              </div>
+            </div>
+            <div className="mt-3">
+              <label className="block text-sm font-medium text-claude-text mb-1.5">平仓手续费（可选）</label>
+              <input className="input" type="number" step="0.01" min="0" value={closeCommission}
+                onChange={e => setCloseCommission(e.target.value)} placeholder="0.00" />
+            </div>
+          </div>
+
+          {/* 开新合约 */}
+          <div>
+            <p className="text-xs font-semibold text-claude-muted uppercase tracking-wide mb-3">开新合约</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-claude-text mb-1.5">期权类型</label>
+                <select className="select" value={newType} onChange={e => setNewType(e.target.value)}>
+                  <option value="call">Call（看涨）</option>
+                  <option value="put">Put（看跌）</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-claude-text mb-1.5">操作方向</label>
+                <select className="select" value={newDirection} onChange={e => setNewDirection(e.target.value)}>
+                  <option value="sell">卖出（Sell to Open）</option>
+                  <option value="buy">买入（Buy to Open）</option>
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <div>
+                <label className="block text-sm font-medium text-claude-text mb-1.5">行权价 *</label>
+                <input className="input" type="number" step="0.5" min="0" value={newStrike}
+                  onChange={e => setNewStrike(e.target.value)} placeholder="0.00" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-claude-text mb-1.5">到期日 *</label>
+                <CalendarPicker value={newExpiration} onChange={setNewExpiration} />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3 mt-3">
+              <div>
+                <label className="block text-sm font-medium text-claude-text mb-1.5">合约数 *</label>
+                <input className="input" type="number" step="1" min="1" value={newContracts}
+                  onChange={e => setNewContracts(e.target.value)} placeholder="1" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-claude-text mb-1.5">权利金 *</label>
+                <input className="input" type="number" step="0.01" min="0" value={newPremium}
+                  onChange={e => setNewPremium(e.target.value)} placeholder="0.00" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-claude-text mb-1.5">手续费</label>
+                <input className="input" type="number" step="0.01" min="0" value={newCommission}
+                  onChange={e => setNewCommission(e.target.value)} placeholder="0.00" />
+              </div>
+            </div>
+          </div>
+
+          {/* 预览 */}
+          {(oldPnL != null || newCredit != null) && (
+            <div className="bg-gray-50 rounded-xl p-4 text-sm space-y-2">
+              {oldPnL != null && (
+                <div className="flex justify-between">
+                  <span className="text-claude-muted">旧合约已实现盈亏</span>
+                  <span className={`font-semibold ${oldPnL >= 0 ? 'text-profit' : 'text-loss'}`}>{fmt.pnl(oldPnL)}</span>
+                </div>
+              )}
+              {newCredit != null && (
+                <div className="flex justify-between">
+                  <span className="text-claude-muted">新合约权利金收入</span>
+                  <span className="font-semibold text-profit">+{fmt.currency(newCredit)}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex gap-3 px-6 py-4 border-t border-claude-border flex-shrink-0">
+          <button onClick={onClose}
+            className="flex-1 px-4 py-2.5 border border-claude-border rounded-xl text-sm font-medium text-claude-muted hover:bg-gray-50 transition-colors">
+            取消
+          </button>
+          <button onClick={handleSubmit}
+            disabled={!canSubmit}
+            className="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-semibold rounded-xl text-sm transition-colors">
+            确认滚动
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Filter dropdown ──────────────────────────────────────────────────────────
 function FilterSelect({ value, onChange, options }) {
   const [open, setOpen] = useState(false)
@@ -187,6 +384,7 @@ export default function OptionsPositions() {
   const [showStrategyModal, setShowStrategyModal] = useState(false)
   const [closeTarget, setCloseTarget] = useState(null)
   const [exerciseTarget, setExerciseTarget] = useState(null)
+  const [rollTarget, setRollTarget] = useState(null)
   const [showGreeks, setShowGreeks] = useState(false)
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
@@ -299,6 +497,7 @@ export default function OptionsPositions() {
     else if (sortBy === 'pnl') list = [...list].sort((a, b) => (b.displayPnL ?? 0) - (a.displayPnL ?? 0))
     else if (sortBy === 'strike') list = [...list].sort((a, b) => a.strike - b.strike)
     else if (sortBy === 'cost') list = [...list].sort((a, b) => b.totalCost - a.totalCost)
+    else if (sortBy === 'annualizedReturn') list = [...list].sort((a, b) => (b.annualizedReturn ?? -Infinity) - (a.annualizedReturn ?? -Infinity))
 
     return list
   }, [enriched, search, filterStatus, filterType, sortBy])
@@ -377,6 +576,25 @@ export default function OptionsPositions() {
       closeDate,
     })
     setExerciseTarget(null)
+  }
+
+  const handleRoll = (data) => {
+    // 1. 平掉旧合约（记已实现盈亏）
+    dispatch({
+      type: 'CLOSE_OPTIONS_POSITION',
+      portfolioId: activePortfolio.id,
+      optionId: rollTarget.id,
+      closePrice: data.closePrice,
+      closeDate: data.closeDate,
+      closeCommission: data.closeCommission,
+    })
+    // 2. 开新合约（自动关联 rolledFrom）
+    dispatch({
+      type: 'ADD_OPTION',
+      portfolioId: activePortfolio.id,
+      option: data.newOption,
+    })
+    setRollTarget(null)
   }
 
   const handleDelete = (o) => {
@@ -718,10 +936,16 @@ export default function OptionsPositions() {
                             <td className="py-3 px-3 text-right">
                               <div className="flex items-center justify-end gap-1">
                                 {!isClosed && (
-                                  <button onClick={() => setCloseTarget(o)}
-                                    className="text-xs text-claude-muted border border-claude-border hover:border-gray-400 hover:text-claude-text px-2.5 py-1 rounded-lg transition-colors">
-                                    平仓
-                                  </button>
+                                  <>
+                                    <button onClick={() => setRollTarget(o)}
+                                      className="text-xs text-blue-600 border border-blue-200 hover:bg-blue-50 px-2.5 py-1 rounded-lg transition-colors">
+                                      滚动
+                                    </button>
+                                    <button onClick={() => setCloseTarget(o)}
+                                      className="text-xs text-claude-muted border border-claude-border hover:border-gray-400 hover:text-claude-text px-2.5 py-1 rounded-lg transition-colors">
+                                      平仓
+                                    </button>
+                                  </>
                                 )}
                                 <button onClick={() => setAddModal({ open: true, edit: o })}
                                   className="p-1.5 rounded-lg text-claude-subtle hover:text-blue-600 hover:bg-blue-50 transition-colors">
@@ -839,10 +1063,16 @@ export default function OptionsPositions() {
                         <td className="py-3.5 px-3 text-right">
                           <div className="flex items-center justify-end gap-1">
                             {!isClosed && (
-                              <button onClick={() => setCloseTarget(o)}
-                                className="text-xs text-claude-muted border border-claude-border hover:border-gray-400 hover:text-claude-text px-2.5 py-1 rounded-lg transition-colors">
-                                平仓
-                              </button>
+                              <>
+                                <button onClick={() => setRollTarget(o)}
+                                  className="text-xs text-blue-600 border border-blue-200 hover:bg-blue-50 px-2.5 py-1 rounded-lg transition-colors">
+                                  滚动
+                                </button>
+                                <button onClick={() => setCloseTarget(o)}
+                                  className="text-xs text-claude-muted border border-claude-border hover:border-gray-400 hover:text-claude-text px-2.5 py-1 rounded-lg transition-colors">
+                                  平仓
+                                </button>
+                              </>
                             )}
                             <button onClick={() => setAddModal({ open: true, edit: o })}
                               className="p-1.5 rounded-lg text-claude-subtle hover:text-blue-600 hover:bg-blue-50 transition-colors">
@@ -889,6 +1119,13 @@ export default function OptionsPositions() {
           option={exerciseTarget}
           onClose={() => setExerciseTarget(null)}
           onConfirm={handleExercise}
+        />
+      )}
+      {rollTarget && (
+        <RollModal
+          option={rollTarget}
+          onClose={() => setRollTarget(null)}
+          onConfirm={handleRoll}
         />
       )}
     </div>
