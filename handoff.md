@@ -1,12 +1,31 @@
 # 投资组合管理系统 — 任务交接文档
 
-**更新日期**：2026-08-14（第五十次，期权新增一键滚动 Roll 功能）  
+**更新日期**：2026-08-14（第五十一次，修复总资产重复计算卖出期权权利金）  
 **技术栈**：React 18 + Vite + Tailwind CSS v3 + Recharts + Supabase  
 **运行地址**：http://localhost:5173（本地）/ https://frankchang617.github.io/portfolio-manager/（公网）
 
 ---
 
-## 最新状态（2026-08-14，第五十次）✅
+## 最新状态（2026-08-14，第五十一次）✅
+
+### 修复总资产重复计算卖出期权权利金
+
+**改动文件**：`src/components/StockPositions.jsx`、`src/components/Dashboard.jsx`
+
+**Bug**：总资产公式 `股票 + 现金 + 期权未实现盈亏(unrealizedPnL)` 对**卖出期权**双重计算权利金——卖出权利金已含在现金里，`unrealizedPnL`（浮盈 = 权利金 − 买回成本）又把它算了一遍，导致总资产虚增（例：TOS F 显示 $19,969.09，实际净资产 $17,984.92，虚增约 $1,984）。
+
+**修复**：改用 `marketValue`（期权市场价值，`calculateOptionMetrics` 已返回且带方向：卖出为负负债、买入为正资产）替代 `unrealizedPnL` 计入总资产：
+
+- `StockPositions.jsx`：`optionMetrics` 新增 `marketValue` 累加；`totalAssets = totalStockValue + cash + optionMetrics.marketValue`；banner 分项「期权未实现盈亏」改为「期权净头寸」（展示 marketValue）
+- `Dashboard.jsx`：`calcPortfolioMetrics` 的 `openOptions.reduce` 改为 for 循环同时累加 `optionUnrealizedPnL` 和 `optionMarketValue`；`totalValue = totalStockValue + cash + optionMarketValue`
+
+**关键原则**：现金已含卖出权利金，期权按市场价值（卖出为负）计入，净资产 = 股票 + 现金 + 期权市场价值。`unrealizedPnL`（浮盈）仅保留在盈亏指标卡片，不参与资产计算。
+
+**验证**：`npx vite build` 通过（716ms）；实测 TOS F：总资产 $17,984.92 = 股票 $5,819.20 + 现金 $12,281.13 + 期权净头寸 −$115.41，公式自洽。跨组合总资产 $50,604.73。
+
+---
+
+## 历史状态（2026-08-14，第五十次）✅
 
 ### 期权持仓新增「一键滚动（Roll）」功能
 

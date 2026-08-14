@@ -341,17 +341,20 @@ function calcPortfolioMetrics(portfolio, prices, riskFreeRate = 0.05) {
   const closedOptions = options.filter(o => o.status === 'closed')
   const openOptionsCount = openOptions.length
 
-  const optionUnrealizedPnL = openOptions.reduce((sum, o) => {
+  let optionUnrealizedPnL = 0
+  let optionMarketValue = 0
+  for (const o of openOptions) {
     const underlyingPrice = prices[o.symbol.toUpperCase()]?.price
-    if (!underlyingPrice) return sum
+    if (!underlyingPrice) continue
     const contracts = Math.abs(o.contracts ?? 1)
     const direction = o.direction || (o.contracts > 0 ? 'buy' : 'sell')
     const m = calculateOptionMetrics(
       { ...o, contracts: direction === 'buy' ? contracts : -contracts },
       underlyingPrice, riskFreeRate
     )
-    return sum + (isNaN(m.unrealizedPnL) ? 0 : m.unrealizedPnL) - (o.commission ?? 0)
-  }, 0)
+    optionUnrealizedPnL += (isNaN(m.unrealizedPnL) ? 0 : m.unrealizedPnL) - (o.commission ?? 0)
+    optionMarketValue += (isNaN(m.marketValue) ? 0 : m.marketValue)
+  }
 
   const unrealizedPnL = stockUnrealizedPnL + optionUnrealizedPnL
   // Use stock-only unrealized in numerator — option unrealized has no stock cost basis
@@ -361,8 +364,8 @@ function calcPortfolioMetrics(portfolio, prices, riskFreeRate = 0.05) {
   const optionRealizedPnL = closedOptions.reduce((s, o) => s + (o.realizedPnL ?? 0), 0)
   const realizedPnL = stockRealizedPnL + optionRealizedPnL
 
-  // Include option unrealized to match StockPositions' totalAssets formula
-  const totalValue = totalStockValue + cash + optionUnrealizedPnL
+  // 期权按市场价值计入（卖出为负负债）；现金已含权利金，避免重复计算
+  const totalValue = totalStockValue + cash + optionMarketValue
   const totalPnL = unrealizedPnL + realizedPnL
   const totalPnLPct = costBasis > 0 ? (totalPnL / costBasis) * 100 : 0
   // Stock-only total (cost-basis denominator is stocks only, so this % is meaningful)

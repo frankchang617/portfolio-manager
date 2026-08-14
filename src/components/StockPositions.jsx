@@ -114,6 +114,7 @@ export default function StockPositions() {
     let unrealizedPnL = 0
     let realizedPnL = 0
     let openCount = 0
+    let marketValue = 0
     for (const o of sourceOptions) {
       const status = o.status || 'open'
       if (status === 'open') {
@@ -128,12 +129,13 @@ export default function StockPositions() {
             q.price, r
           )
           unrealizedPnL += (isNaN(m.unrealizedPnL) ? 0 : m.unrealizedPnL) - commission
+          marketValue += (isNaN(m.marketValue) ? 0 : m.marketValue)
         }
       } else {
         realizedPnL += o.realizedPnL ?? 0
       }
     }
-    return { unrealizedPnL, realizedPnL, openCount }
+    return { unrealizedPnL, realizedPnL, openCount, marketValue }
   }, [sourceOptions, prices, r])
 
   const rows = useMemo(() => {
@@ -206,7 +208,7 @@ export default function StockPositions() {
 
   if (!activePortfolio) return <div className="p-6 text-claude-muted">请先创建投资组合</div>
 
-  const totalAssets = metrics.totalStockValue + metrics.cash + optionMetrics.unrealizedPnL
+  const totalAssets = metrics.totalStockValue + metrics.cash + optionMetrics.marketValue
 
   const hasOpenOptions  = optionMetrics.openCount > 0
   const hasClosedOptions = optionMetrics.realizedPnL !== 0
@@ -284,14 +286,14 @@ export default function StockPositions() {
           </div>
           <div>
             <p className="text-xs text-claude-muted font-medium mb-1">
-              期权未实现盈亏
+              期权净头寸
               {optionMetrics.openCount > 0 && <span className="ml-1 text-claude-subtle">({optionMetrics.openCount} 个)</span>}
             </p>
-            <p className={`text-sm font-semibold ${optionMetrics.unrealizedPnL >= 0 ? 'profit-text' : 'loss-text'}`}>
-              {fmt.pnl(optionMetrics.unrealizedPnL)}
+            <p className={`text-sm font-semibold ${optionMetrics.marketValue >= 0 ? 'profit-text' : 'loss-text'}`}>
+              {fmt.pnl(optionMetrics.marketValue)}
             </p>
-            {totalAssets !== 0 && optionMetrics.unrealizedPnL !== 0 && (
-              <p className="text-xs text-claude-subtle">{((optionMetrics.unrealizedPnL / totalAssets) * 100).toFixed(1)}%</p>
+            {totalAssets !== 0 && optionMetrics.marketValue !== 0 && (
+              <p className="text-xs text-claude-subtle">{((optionMetrics.marketValue / totalAssets) * 100).toFixed(1)}%</p>
             )}
           </div>
           {optionMetrics.realizedPnL !== 0 && (
